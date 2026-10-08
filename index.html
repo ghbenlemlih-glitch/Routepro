@@ -1,0 +1,916 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0D6B5B">
+<title>RoutePro Commercial</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Mise en page : appli mobile plein écran — en-tête fin, vue active au centre, barre d'onglets en bas. */
+:root{
+  --bg:#EEF2F0; --surface:#FFFFFF; --surface2:#F5F8F7; --ink:#14201C; --muted:#5A6A64; --line:#D7E0DC;
+  --accent:#0D6B5B; --accent-ink:#FFFFFF; --accent-soft:#DCEFEA; --saffron:#B97D0E;
+  --ok:#2F8A4E; --due:#CF7F14; --late:#C2432E; --never:#8B979C; --prospect:#6B54BF; --me:#1F6FE0;
+  --shadow:0 8px 28px rgba(20,32,28,.14); --tile-filter:none;
+  --f-display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0F1614; --surface:#18221F; --surface2:#1F2B27; --ink:#E6EEEB; --muted:#97A6A0; --line:#2C3934;
+  --accent:#3DB39C; --accent-ink:#04201A; --accent-soft:#173B34; --saffron:#E3A63A;
+  --ok:#52BA75; --due:#EAA043; --late:#E2674F; --never:#7F8C91; --prospect:#9C88F0; --me:#5B9BFF;
+  --shadow:0 8px 28px rgba(0,0,0,.45); --tile-filter:brightness(.72) contrast(1.08) saturate(.7);
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0F1614; --surface:#18221F; --surface2:#1F2B27; --ink:#E6EEEB; --muted:#97A6A0; --line:#2C3934;
+  --accent:#3DB39C; --accent-ink:#04201A; --accent-soft:#173B34; --saffron:#E3A63A;
+  --ok:#52BA75; --due:#EAA043; --late:#E2674F; --never:#7F8C91; --prospect:#9C88F0; --me:#5B9BFF;
+  --shadow:0 8px 28px rgba(0,0,0,.45); --tile-filter:brightness(.72) contrast(1.08) saturate(.7);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--f-body);-webkit-tap-highlight-color:transparent}
+button,input,select,textarea{font:inherit;color:inherit}
+[hidden]{display:none!important}
+.app{height:100%;display:flex;flex-direction:column}
+
+/* En-tête */
+.top{display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top,0px) + 10px) 16px 10px;background:var(--surface);border-bottom:1px solid var(--line)}
+.brand{font:700 19px/1 var(--f-display);letter-spacing:-.01em}
+.brand b{color:var(--accent)}
+.top .date{color:var(--muted);font-size:13px;margin-left:auto}
+.gps{font:500 12px/1 var(--f-mono);padding:6px 9px;border-radius:999px;background:var(--surface2);border:1px solid var(--line);color:var(--muted);cursor:pointer}
+.gps.on{color:var(--me);border-color:color-mix(in srgb,var(--me) 40%,transparent)}
+
+main{flex:1;min-height:0;position:relative;overflow:hidden}
+.view{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.pad{padding:16px 16px 28px;display:flex;flex-direction:column;gap:14px;max-width:760px;margin:0 auto}
+
+/* Onglets */
+.tabs{display:grid;grid-template-columns:repeat(5,1fr);background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+.tabs button{border:0;background:none;padding:8px 2px 9px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;position:relative}
+.tabs svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tabs button[aria-current="true"]{color:var(--accent)}
+.tabs .badge{position:absolute;top:4px;left:calc(50% + 6px);background:var(--late);color:#fff;font:600 10px/16px var(--f-body);min-width:16px;padding:0 4px;border-radius:8px}
+
+/* Carte */
+#map{position:absolute;inset:0;background:var(--surface2)}
+.leaflet-tile-pane{filter:var(--tile-filter)}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.leaflet-popup-content{margin:12px 14px;font:14px/1.4 var(--f-body);min-width:190px}
+.leaflet-container a.leaflet-popup-close-button{color:var(--muted)}
+.leaflet-control-attribution{font-size:10px}
+.pop-t{font-weight:600;font-size:15px}
+.pop-s{color:var(--muted);font-size:12.5px;margin:2px 0 8px}
+.pop-a{display:flex;gap:6px;flex-wrap:wrap}
+.pin{width:28px;height:28px;border-radius:50%;background:var(--surface);border:3px solid var(--c);color:var(--ink);font:600 13px/22px var(--f-mono);text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+.pin.done{background:var(--c);color:#fff}
+.mapbar{position:absolute;left:12px;right:12px;bottom:12px;z-index:500;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.mapbar select,.mapbar .btn{box-shadow:var(--shadow)}
+.mapbar select{min-height:42px;border-radius:12px;border:1px solid var(--line);background:var(--surface);padding:0 10px;font-weight:600;font-size:14px}
+.maptop{position:absolute;left:12px;top:12px;z-index:500;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.legend{background:var(--surface);border-radius:12px;padding:8px 10px;box-shadow:var(--shadow);font-size:12px;display:grid;gap:3px}
+.legend span{display:flex;align-items:center;gap:6px}
+.place-banner{position:absolute;left:12px;right:12px;top:12px;z-index:600;background:var(--ink);color:var(--bg);padding:12px 14px;border-radius:12px;display:flex;gap:10px;align-items:center;box-shadow:var(--shadow);font-weight:500}
+.place-banner .btn{margin-left:auto}
+
+/* Composants */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:42px;padding:0 14px;border-radius:11px;border:1px solid var(--line);background:var(--surface);font-weight:600;font-size:14px;cursor:pointer;white-space:nowrap;text-decoration:none;color:var(--ink)}
+.btn:focus-visible,.tabs button:focus-visible,.chip:focus-visible,.row:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.ghost{background:var(--surface2)}
+.btn.sm{min-height:34px;padding:0 10px;font-size:13px;border-radius:9px}
+.btn.icon{width:34px;padding:0}
+.btn.danger{color:var(--late)}
+.btn:disabled{opacity:.45;cursor:default}
+.btn.block{width:100%}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+.btns .btn{flex:1 1 auto}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px}
+.card h3,.sec-h{font:700 15px/1.2 var(--f-display);margin:0 0 10px;letter-spacing:-.005em}
+.sec-h{margin:4px 0 0;display:flex;align-items:baseline;gap:8px}
+.sec-h small{font:500 12px var(--f-body);color:var(--muted)}
+.muted{color:var(--muted)}
+.small{font-size:12.5px}
+.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--c) 14%,transparent);color:var(--c);white-space:nowrap}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--c);flex:none}
+.banner{background:color-mix(in srgb,var(--saffron) 14%,var(--surface));border:1px solid color-mix(in srgb,var(--saffron) 35%,transparent);border-radius:12px;padding:10px 12px;display:flex;gap:10px;align-items:center;font-size:13.5px;flex-wrap:wrap}
+.banner .btn{margin-left:auto}
+
+/* Journée */
+.daynav{display:flex;gap:8px;align-items:center}
+.daynav input{flex:1;min-width:0;min-height:42px;border-radius:11px;border:1px solid var(--line);background:var(--surface);padding:0 12px;font-weight:600}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 10px 9px;min-width:0}
+.kpi .v{font:500 20px/1.1 var(--f-mono);font-variant-numeric:tabular-nums}
+.kpi .l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:4px}
+.progress{height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.progress i{display:block;height:100%;background:var(--ok)}
+.stops{display:flex;flex-direction:column;gap:8px}
+.stop{display:grid;grid-template-columns:32px 1fr auto;gap:10px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px}
+.stop .n{width:30px;height:30px;border-radius:50%;border:2.5px solid var(--c);display:grid;place-items:center;font:600 13px var(--f-mono)}
+.stop.done .n{background:var(--c);color:#fff}
+.stop .who{min-width:0}
+.stop .nm{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stop .side{display:flex;gap:4px;align-items:center}
+.stop .acts{grid-column:2 / -1;display:flex;gap:6px;flex-wrap:wrap}
+.empty{text-align:center;padding:26px 16px;color:var(--muted);border:1.5px dashed var(--line);border-radius:14px}
+.empty b{display:block;color:var(--ink);font:700 16px var(--f-display);margin-bottom:4px}
+
+/* Clients */
+.search{min-height:44px;border-radius:12px;border:1px solid var(--line);background:var(--surface);padding:0 14px;width:100%}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 12px;font-size:13px;font-weight:600;white-space:nowrap;cursor:pointer;color:var(--muted)}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.chip .num{opacity:.75;margin-left:3px}
+.list{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.row{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:12px 14px;border:0;border-bottom:1px solid var(--line);background:none;text-align:left;cursor:pointer;width:100%}
+.row:last-child{border-bottom:0}
+.row .nm{font-weight:600}
+.row .meta{font-size:12.5px;color:var(--muted)}
+.row .r{text-align:right;font-size:12px;color:var(--muted)}
+
+/* Stats */
+.seg{display:grid;grid-template-columns:repeat(4,1fr);background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:3px;gap:3px}
+.seg button{border:0;background:none;border-radius:9px;padding:8px 4px;font-weight:600;font-size:13px;color:var(--muted);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.kpis.k3{grid-template-columns:repeat(3,1fr)}
+.bars{display:grid;gap:8px}
+.bar{display:grid;grid-template-columns:96px 1fr 34px;gap:10px;align-items:center;font-size:13px}
+.bar .t{height:12px;border-radius:6px;background:var(--surface2);overflow:hidden}
+.bar .t i{display:block;height:100%;border-radius:6px;background:var(--c)}
+.bar .num{text-align:right}
+.cols{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;align-items:end;height:120px;padding-top:14px}
+.col{display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end}
+.col i{width:100%;max-width:30px;background:var(--accent);border-radius:5px 5px 2px 2px;min-height:2px}
+.col span{font-size:11px;color:var(--muted)}
+.col b{font:500 11px var(--f-mono)}
+.inline-num{width:64px;min-height:34px;border-radius:9px;border:1px solid var(--line);background:var(--surface);text-align:center}
+
+/* Formulaires / feuilles */
+.sheet-wrap{position:fixed;inset:0;z-index:2000;background:rgba(8,14,12,.45);display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--surface);width:100%;max-width:620px;max-height:90%;overflow-y:auto;border-radius:20px 20px 0 0;padding:8px 16px calc(env(safe-area-inset-bottom,0px) + 18px);box-shadow:var(--shadow)}
+.sheet .grab{width:40px;height:4px;border-radius:2px;background:var(--line);margin:4px auto 10px}
+.sheet h2{font:700 20px/1.2 var(--f-display);margin:0 0 4px;letter-spacing:-.01em;text-wrap:balance}
+.form{display:flex;flex-direction:column;gap:12px;margin-top:12px}
+.field{display:flex;flex-direction:column;gap:5px;min-width:0}
+.field>span{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.field input,.field select,.field textarea{min-height:44px;border-radius:11px;border:1px solid var(--line);background:var(--surface2);padding:10px 12px;width:100%}
+.field textarea{min-height:84px;resize:vertical}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.locstat{font-size:12.5px;font-weight:600}
+.check{display:flex;gap:10px;align-items:center;font-weight:500}
+.check input{width:20px;height:20px;accent-color:var(--accent)}
+.results{display:flex;gap:6px;flex-wrap:wrap}
+.results button{border:1.5px solid var(--line);background:var(--surface2);border-radius:10px;padding:9px 12px;font-weight:600;font-size:13.5px;cursor:pointer}
+.results button[aria-pressed="true"]{border-color:var(--c);background:color-mix(in srgb,var(--c) 15%,var(--surface));color:var(--c)}
+.hist{display:flex;flex-direction:column;gap:8px}
+.hist .h{border-left:3px solid var(--c);padding:2px 0 2px 10px}
+.info{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14px}
+.info dt{color:var(--muted)}
+.info dd{margin:0;min-width:0;overflow-wrap:anywhere;user-select:text}
+.pick{max-height:46vh;overflow-y:auto;border:1px solid var(--line);border-radius:12px}
+.pick label{display:grid;grid-template-columns:auto auto 1fr;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer}
+.pick label:last-child{border-bottom:0}
+.pick input{width:20px;height:20px;accent-color:var(--accent)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 76px);z-index:3000;background:var(--ink);color:var(--bg);padding:11px 16px;border-radius:12px;font-weight:500;font-size:14px;max-width:calc(100% - 32px);box-shadow:var(--shadow);text-align:center}
+table.prev{border-collapse:collapse;font-size:12.5px;width:100%}
+table.prev th,table.prev td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;white-space:nowrap}
+.scrollx{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+/* Déplacement */
+.tripcta{display:flex;gap:12px;align-items:center;background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:14px;padding:12px 14px;cursor:pointer;text-align:left;width:100%}
+.tripcta b{display:block;font:700 15px var(--f-display)}
+.tripcta span{font-size:12.5px;color:var(--muted)}
+.chip.city[aria-pressed="false"]{text-decoration:line-through;opacity:.7}
+.chipwrap{display:flex;gap:6px;flex-wrap:wrap}
+.day{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.day-h{display:flex;align-items:baseline;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);border-top:4px solid var(--dc);flex-wrap:wrap}
+.day-h b{font:700 16px var(--f-display)}
+.day-h .meta{margin-left:auto;font-size:12.5px;color:var(--muted)}
+.leg{display:grid;grid-template-columns:52px 1fr auto;gap:10px;align-items:start;padding:9px 14px;border-bottom:1px dashed var(--line)}
+.leg:last-of-type{border-bottom:0}
+.leg .h{font:500 14px var(--f-mono);color:var(--dc)}
+.leg .nm{font-weight:600}
+.leg .d{font-size:12px;color:var(--muted);text-align:right;white-space:nowrap}
+.leg.end .h,.leg.start .h{color:var(--muted)}
+.day-f{display:flex;gap:6px;flex-wrap:wrap;padding:10px 14px;background:var(--surface2);border-top:1px solid var(--line)}
+.warn{color:var(--late);font-weight:600}
+.mini{display:flex;flex-direction:column;max-height:300px;overflow-y:auto;border:1px solid var(--line);border-radius:12px}
+.mini div{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:7px 8px 7px 12px;border-bottom:1px solid var(--line)}
+.mini div:last-child{border-bottom:0}
+@media (max-width:420px){.kpis{grid-template-columns:repeat(2,1fr)}.kpis.k3{grid-template-columns:repeat(3,1fr)}.bar{grid-template-columns:82px 1fr 30px}}
+.lock{position:fixed;inset:0;z-index:5000;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:24px 16px}
+.lock form{width:100%;max-width:340px;display:flex;flex-direction:column;gap:14px;text-align:center}
+.lock h1{font:700 28px/1.1 var(--f-display);margin:0}.lock h1 b{color:var(--accent)}
+.lock input{min-height:54px;border-radius:14px;border:1px solid var(--line);background:var(--surface);text-align:center;font:500 26px var(--f-mono);letter-spacing:.3em}
+.lock .err{color:var(--late);font-weight:600;min-height:20px;font-size:14px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="lock" id="lock"><form id="lockForm" autocomplete="off"><h1>Route<b>Pro</b></h1><p class="muted" style="margin:0">Entre ton code d'accès</p><input id="lockIn" type="password" inputmode="numeric" maxlength="12" aria-label="Code d'accès" autofocus><div class="err" id="lockErr"></div><button class="btn pri block" type="submit">Ouvrir</button></form></div>
+<div class="app">
+  <header class="top">
+    <div class="brand">Route<b>Pro</b></div>
+    <span class="date" id="hdrDate"></span>
+    <button class="gps" id="gpsChip" data-act="locate" aria-label="Me localiser">GPS —</button>
+  </header>
+
+  <main>
+    <section class="view" id="v-carte">
+      <div id="map"></div>
+      <div class="maptop" id="mapTop">
+        <button class="btn sm" data-act="toggleLegend">Légende</button>
+        <div class="legend" id="legend" hidden></div>
+        <button class="btn sm" data-act="tHide" id="tripHide" hidden>Masquer le déplacement</button>
+      </div>
+      <div class="place-banner" id="placeBanner" hidden><span id="placeText">Touche la carte</span><button class="btn sm" data-act="cancelPlace">Annuler</button></div>
+      <div class="mapbar">
+        <button class="btn pri" data-act="locate">Ma position</button>
+        <select id="chrType" aria-label="Catégorie">
+          <option value="hotel">Hôtels</option>
+          <option value="restaurant">Restaurants</option>
+          <option value="cafe">Cafés</option>
+          <option value="bar">Bars</option>
+          <option value="all">Tout CHR</option>
+        </select>
+        <select id="chrRadius" aria-label="Rayon">
+          <option value="500">500 m</option>
+          <option value="1000" selected>1 km</option>
+          <option value="2000">2 km</option>
+          <option value="5000">5 km</option>
+        </select>
+        <button class="btn" data-act="chrSearch">Chercher ici</button>
+        <button class="btn icon" data-act="chrClear" id="chrClear" hidden aria-label="Effacer les résultats">✕</button>
+      </div>
+    </section>
+
+    <section class="view" id="v-jour" hidden><div class="pad" id="jourBody"></div></section>
+    <section class="view" id="v-clients" hidden>
+      <div class="pad">
+        <div class="btns" style="flex-wrap:nowrap">
+          <input class="search" id="cliSearch" type="search" placeholder="Rechercher nom, ville, activité…" autocomplete="off">
+          <button class="btn pri" style="flex:none" data-act="newClient">+ Client</button>
+        </div>
+        <div class="chips" id="cliChips"></div>
+        <div id="cliList"></div>
+      </div>
+    </section>
+    <section class="view" id="v-stats" hidden><div class="pad" id="statsBody"></div></section>
+    <section class="view" id="v-plus" hidden><div class="pad" id="plusBody"></div></section>
+    <section class="view" id="v-trip" hidden><div class="pad" id="tripBody"></div></section>
+  </main>
+
+  <nav class="tabs" aria-label="Navigation">
+    <button data-tab="carte" aria-current="true"><svg viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>Carte</button>
+    <button data-tab="jour"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Journée<span class="badge" id="badgeJour" hidden></span></button>
+    <button data-tab="clients"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.8c1.9.7 3.1 2.4 3.5 5.2"/></svg>Clients</button>
+    <button data-tab="stats"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Stats</button>
+    <button data-tab="plus"><svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v3h16v-3"/></svg>Données</button>
+  </nav>
+</div>
+
+<div class="sheet-wrap" id="sheetWrap" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
+<div class="toast" id="toast" hidden></div>
+<input type="file" id="fileImport" accept=".xlsx,.xls,.csv" hidden>
+<input type="file" id="fileRestore" accept=".json,application/json" hidden>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script>
+"use strict";
+/* ---------- utilitaires ---------- */
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const pad=n=>String(n).padStart(2,'0');
+const dstr=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const today=()=>dstr(new Date());
+const nowTime=()=>{const d=new Date();return pad(d.getHours())+':'+pad(d.getMinutes())};
+const addDays=(s,n)=>{const d=new Date(s+'T12:00');d.setDate(d.getDate()+n);return dstr(d)};
+const daysBetween=(a,b)=>Math.round((new Date(b+'T12:00')-new Date(a+'T12:00'))/864e5);
+const fmtD=s=>new Date(s+'T12:00').toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'});
+const fmtDL=s=>new Date(s+'T12:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
+const fmtDS=s=>s?new Date(s+'T12:00').toLocaleDateString('fr-FR'):'';
+const norm=s=>String(s??'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+function hav(a,b){const R=6371,r=Math.PI/180,dLa=(b.lat-a.lat)*r,dLo=(b.lng-a.lng)*r;const x=Math.sin(dLa/2)**2+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dLo/2)**2;return 2*R*Math.asin(Math.sqrt(x))}
+const fmtDur=m=>m==null?'—':(m>=60?Math.floor(m/60)+'h'+pad(Math.round(m%60)):Math.round(m)+' min');
+const hasPos=c=>c&&Number.isFinite(+c.lat)&&Number.isFinite(+c.lng)&&c.lat!==''&&c.lat!==null;
+
+/* ---------- données ---------- */
+const KEY='routepro_v2';
+let storageOK=true;
+function blank(){return{clients:[],visites:[],tournees:{},settings:{freq:14,seuil:30,depart:null},seeded:false}}
+function load(){try{const r=localStorage.getItem(KEY);return r?JSON.parse(r):null}catch(e){storageOK=false;return null}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){storageOK=false;toast("Impossible d'enregistrer : le stockage du navigateur est indisponible.")}}
+let S=load()||blank();
+S.settings=Object.assign({freq:14,seuil:30,depart:null},S.settings||{});
+const byId=id=>S.clients.find(c=>c.id===id);
+
+const RES=[['commande','Commande','--ok'],['interesse','Intéressé','--accent'],['relancer','À relancer','--due'],['absent','Absent','--never'],['refus','Refus','--late']];
+const resLabel=k=>(RES.find(r=>r[0]===k)||[,'—'])[1];
+const resColor=k=>'var('+((RES.find(r=>r[0]===k)||[,,'--muted'])[2])+')';
+const ST={late:['En retard','--late'],due:['À voir','--due'],never:['Jamais visité','--never'],prospect:['Prospect','--prospect'],ok:['À jour','--ok']};
+const ST_ORDER=['late','due','never','prospect','ok'];
+const ACTS=['Grossiste','Supérette','Épicerie','Café','Restaurant','Hôtel','Pharmacie','Boulangerie','Distributeur','Snack','Boucherie','Quincaillerie'];
+
+let IDX={last:{},by:{}};
+function buildIndex(){IDX={last:{},by:{}};for(const v of S.visites){(IDX.by[v.clientId]??=[]).push(v);if(!IDX.last[v.clientId]||v.dt>IDX.last[v.clientId])IDX.last[v.clientId]=v.dt}for(const k in IDX.by)IDX.by[k].sort((a,b)=>b.dt.localeCompare(a.dt))}
+function lastBefore(id,ref){const l=IDX.by[id];if(!l)return null;const v=l.find(v=>v.dt.slice(0,10)<=ref);return v?v.dt:null}
+function status(c,ref=today()){
+  if(c.relance&&c.relance<=ref)return'due';
+  const lv=lastBefore(c.id,ref);
+  if(!lv)return c.prospect?'prospect':'never';
+  const d=daysBetween(lv.slice(0,10),ref),f=+c.freq||S.settings.freq;
+  if(d>f)return'late';if(d>=f*.8)return'due';return'ok';
+}
+const stColor=s=>'var('+ST[s][1]+')';
+const sinceTxt=c=>{const lv=IDX.last[c.id];if(!lv)return'Jamais visité';const d=daysBetween(lv.slice(0,10),today());return d===0?"Vu aujourd'hui":d===1?'Vu hier':'Vu il y a '+d+' j'};
+const doneOn=(id,date)=>(IDX.by[id]||[]).find(v=>v.dt.startsWith(date));
+function tour(date,create){if(!S.tournees[date]&&create)S.tournees[date]={ids:[]};return S.tournees[date]||{ids:[]}}
+
+/* ---------- interface générale ---------- */
+let cur='carte',dayDate=today(),statsPeriod='30',cliFilter='tous',myPos=null,placing=null;
+let toastT;
+function toast(m,ms=3200){const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,ms)}
+function show(v){cur=v;for(const s of $$('.view'))s.hidden=s.id!=='v-'+v;for(const b of $$('.tabs button'))b.setAttribute('aria-current',b.dataset.tab===v?'true':'false');if(v==='carte')setTimeout(()=>map.invalidateSize(),30);renderAll()}
+function openSheet(html){$('#sheet').innerHTML='<div class="grab"></div>'+html;$('#sheetWrap').hidden=false;$('#sheet').scrollTop=0}
+function closeSheet(){$('#sheetWrap').hidden=true;$('#sheet').innerHTML=''}
+$('#sheetWrap').addEventListener('click',e=>{if(e.target.id==='sheetWrap')closeSheet()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#sheetWrap').hidden)closeSheet()});
+let confirmFn=null;
+function askConfirm(title,msg,ok,fn,danger=true){confirmFn=fn;openSheet(`<h2>${esc(title)}</h2><p class="muted">${esc(msg)}</p><div class="btns" style="margin-top:14px"><button class="btn ghost" data-act="closeSheet">Annuler</button><button class="btn ${danger?'pri':'pri'}" data-act="confirmOk" style="${danger?'background:var(--late);border-color:var(--late);color:#fff':''}">${esc(ok)}</button></div>`)}
+
+function renderAll(){buildIndex();renderMarkers();renderHeader();if(cur==='jour')renderDay();if(cur==='clients')renderClients();if(cur==='stats')renderStats();if(cur==='plus')renderPlus();if(cur==='trip')renderTrip()}
+function renderHeader(){
+  $('#hdrDate').textContent=new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
+  const t=tour(today()),rest=t.ids.filter(id=>byId(id)&&!doneOn(id,today())).length;
+  const b=$('#badgeJour');b.hidden=!rest;b.textContent=rest;
+}
+
+/* ---------- carte ---------- */
+const map=L.map('map',{zoomControl:false}).setView([33.5731,-7.5898],12);
+/* fonds de carte : OpenStreetMap, puis CARTO en secours ; message clair si aucun ne charge */
+const TILES=[['https://tile.openstreetmap.org/{z}/{x}/{y}.png','© OpenStreetMap'],['https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png','© OpenStreetMap © CARTO']];
+let tileIdx=0,tileOk=false,tileErr=0,tileLayer=null;
+function setTiles(i){if(tileLayer)map.removeLayer(tileLayer);tileErr=0;tileLayer=L.tileLayer(TILES[i][0],{maxZoom:19,subdomains:'abcd',attribution:TILES[i][1]});
+  tileLayer.on('tileload',()=>{if(!tileOk){tileOk=true;netBanner()}});
+  tileLayer.on('tileerror',()=>{if(tileOk)return;if(++tileErr>=4){if(tileIdx<TILES.length-1)setTiles(++tileIdx);else netBanner(true)}});tileLayer.addTo(map)}
+setTiles(0);
+setTimeout(()=>{if(!tileOk)netBanner(true)},9000);
+function netBanner(fail){let b=document.getElementById('netBanner');
+  if(!fail){if(b)b.remove();return}
+  if(b)return;b=document.createElement('div');b.id='netBanner';b.className='place-banner';b.style.cssText='top:auto;bottom:70px;flex-direction:column;align-items:flex-start;gap:6px';
+  const local=location.protocol==='file:'||location.protocol==='blob:'||location.protocol==='data:'||!/^https?:$/.test(location.protocol);
+  b.innerHTML='<b>La carte ne peut pas se charger</b><span style="font-weight:400;font-size:13px">'+(local?'Le fichier est ouvert directement depuis le téléphone ou un aperçu. Ce mode bloque la carte et le calcul des routes. Ouvre l’appli depuis son lien https (tiiny.host, Netlify…).':'Pas d’accès aux serveurs de carte. Vérifie la connexion internet. Si tu ouvres le fichier depuis WhatsApp, Drive ou l’aperçu de Claude, ouvre plutôt ton lien https dans Chrome ou Safari.')+'</span><button class="btn sm" style="margin-left:0">Fermer</button>';
+  b.querySelector('button').onclick=()=>b.remove();document.getElementById('v-carte').appendChild(b)}
+L.control.zoom({position:'topright'}).addTo(map);
+const clientLayer=L.layerGroup().addTo(map),routeLayer=L.layerGroup().addTo(map),chrLayer=L.layerGroup().addTo(map),meLayer=L.layerGroup().addTo(map);
+const routeGeom={};
+let fitted=false;
+$('#legend').innerHTML=ST_ORDER.map(s=>`<span><i class="dot" style="--c:${stColor(s)}"></i>${ST[s][0]}</span>`).join('')+`<span><i class="dot" style="--c:var(--me)"></i>Ma position</span><span class="muted">Numéros : tournée du jour affiché</span>`;
+function popupHtml(c){const s=status(c);return`<div class="pop-t">${esc(c.nom)}</div><div class="pop-s">${esc([c.activite,c.ville].filter(Boolean).join(' · '))}<br><span class="pill" style="--c:${stColor(s)}">${ST[s][0]}</span> ${esc(sinceTxt(c))}</div><div class="pop-a"><button class="btn sm pri" data-act="detail" data-id="${c.id}">Fiche</button><button class="btn sm" data-act="visit" data-id="${c.id}">Visite</button><a class="btn sm" href="${gmDir(c)}" target="_blank" rel="noopener">Itinéraire</a></div>`}
+function renderMarkers(){
+  clientLayer.clearLayers();
+  const t=tour(dayDate),pts=[];
+  for(const c of S.clients){if(!hasPos(c))continue;const s=status(c),col=getComputedStyle(document.documentElement).getPropertyValue(ST[s][1]).trim();const i=t.ids.indexOf(c.id);let m;
+    if(i>=0){const done=!!doneOn(c.id,dayDate);m=L.marker([c.lat,c.lng],{icon:L.divIcon({className:'',html:`<div class="pin${done?' done':''}" style="--c:${col}">${i+1}</div>`,iconSize:[28,28],iconAnchor:[14,14]}),zIndexOffset:500})}
+    else m=L.circleMarker([c.lat,c.lng],{radius:8,color:'#fff',weight:2,fillColor:col,fillOpacity:1});
+    m.bindPopup(()=>popupHtml(c));m.addTo(clientLayer);pts.push([c.lat,c.lng])}
+  drawRoute();
+  if(!fitted&&pts.length&&cur==='carte'){fitted=true;map.fitBounds(pts,{padding:[40,40],maxZoom:14})}
+}
+function drawRoute(){routeLayer.clearLayers();const t=tour(dayDate);const g=routeGeom[dayDate];
+  const col=getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+  if(g)L.polyline(g,{color:col,weight:5,opacity:.85}).addTo(routeLayer);
+  else{const pts=t.ids.map(byId).filter(hasPos).map(c=>[c.lat,c.lng]);if(pts.length>1)L.polyline(pts,{color:col,weight:3,opacity:.7,dashArray:'6 8'}).addTo(routeLayer)}}
+function setMe(lat,lng,acc,manual){myPos={lat,lng,acc,manual};meLayer.clearLayers();const col=getComputedStyle(document.documentElement).getPropertyValue('--me').trim();
+  if(acc)L.circle([lat,lng],{radius:acc,color:col,weight:1,fillOpacity:.08}).addTo(meLayer);
+  L.circleMarker([lat,lng],{radius:8,color:'#fff',weight:3,fillColor:col,fillOpacity:1}).addTo(meLayer);
+  const g=$('#gpsChip');g.classList.add('on');g.textContent=manual?'Position manuelle':acc?'GPS ±'+Math.round(acc)+' m':'GPS'}
+function locate(cb,silent){
+  if(!navigator.geolocation){if(!silent)toast('Ce navigateur ne donne pas accès au GPS.');cb&&cb(null);return}
+  navigator.geolocation.getCurrentPosition(p=>{setMe(p.coords.latitude,p.coords.longitude,p.coords.accuracy,false);cb&&cb(myPos)},err=>{
+    if(!silent){const insecure=location.protocol!=='https:'&&!/^(localhost|127\.)/.test(location.hostname);
+      toast(insecure?"Le GPS exige une adresse https. Héberge le fichier (voir l'onglet Données) ou touche la carte pour placer ta position.":err.code===1?'Position refusée. Autorise la localisation pour ce site dans les réglages du navigateur.':'Position indisponible pour le moment. Réessaie ou place-la sur la carte.',5500)}
+    cb&&cb(null)},{enableHighAccuracy:true,timeout:12000,maximumAge:30000})}
+function startPlacing(p,text){placing=p;$('#placeText').textContent=text;$('#placeBanner').hidden=false;closeSheet();if(cur!=='carte')show('carte');
+  const c=p.draft&&hasPos(p.draft)?[p.draft.lat,p.draft.lng]:myPos?[myPos.lat,myPos.lng]:null;if(c)map.setView(c,16)}
+map.on('click',e=>{if(!placing)return;const {lat,lng}=e.latlng,p=placing;placing=null;$('#placeBanner').hidden=true;
+  if(p.type==='me'){setMe(lat,lng,null,true);toast('Position définie manuellement')}
+  else if(p.type==='tripDepart'){setTripDepart(lat,lng,'Point placé sur la carte');show('trip')}
+  else if(p.type==='depart'){S.settings.depart={lat,lng};save();toast('Point de départ enregistré');show('plus')}
+  else if(p.type==='client'){p.draft.lat=+lat.toFixed(6);p.draft.lng=+lng.toFixed(6);p.draft._src='Placé sur la carte';openClientForm(p.draft,p.back)}});
+
+/* ---------- recherche CHR (OpenStreetMap / Overpass) ---------- */
+const CHR={hotel:['nwr["tourism"~"^(hotel|guest_house|hostel|motel)$"]'],restaurant:['nwr["amenity"~"^(restaurant|fast_food)$"]'],cafe:['nwr["amenity"="cafe"]'],bar:['nwr["amenity"~"^(bar|pub)$"]']};
+CHR.all=[...CHR.hotel,...CHR.restaurant,...CHR.cafe,...CHR.bar];
+const CHR_LBL={hotel:'Hôtel',guest_house:"Maison d'hôtes",hostel:'Auberge',motel:'Motel',restaurant:'Restaurant',fast_food:'Snack',cafe:'Café',bar:'Bar',pub:'Bar'};
+let chrData={};
+async function chrSearch(){
+  const type=$('#chrType').value,r=+$('#chrRadius').value,c=map.getCenter();
+  const q=`[out:json][timeout:25];(${CHR[type].map(s=>`${s}(around:${r},${c.lat.toFixed(5)},${c.lng.toFixed(5)});`).join('')});out center 250;`;
+  toast('Recherche en cours…',8000);
+  try{const res=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(q),headers:{'Content-Type':'application/x-www-form-urlencoded'}});
+    if(!res.ok)throw new Error(res.status);const js=await res.json();chrLayer.clearLayers();chrData={};let n=0;
+    const known=new Set(S.clients.map(c=>norm(c.nom)));
+    const col=getComputedStyle(document.documentElement).getPropertyValue('--prospect').trim(),colOk=getComputedStyle(document.documentElement).getPropertyValue('--ok').trim();
+    for(const el of js.elements){const lat=el.lat??el.center?.lat,lng=el.lon??el.center?.lon;if(lat==null)continue;const tg=el.tags||{};const nom=tg.name||tg['name:fr']||tg['name:ar'];if(!nom)continue;
+      const k=tg.tourism||tg.amenity;const id='o'+el.id;chrData[id]={nom,act:CHR_LBL[k]||k,tel:tg.phone||tg['contact:phone']||'',adr:[tg['addr:street'],tg['addr:city']].filter(Boolean).join(', '),ville:tg['addr:city']||'',lat,lng};
+      const isC=known.has(norm(nom));
+      L.circleMarker([lat,lng],{radius:6,color:'#fff',weight:1.5,fillColor:isC?colOk:col,fillOpacity:.9}).bindPopup(`<div class="pop-t">${esc(nom)}</div><div class="pop-s">${esc(chrData[id].act)}${chrData[id].tel?' · '+esc(chrData[id].tel):''}${isC?'<br>Déjà dans tes clients':''}</div><div class="pop-a"><a class="btn sm pri" href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}" target="_blank" rel="noopener">Itinéraire</a>${isC?'':`<button class="btn sm" data-act="chrAdd" data-id="${id}">+ Prospect</button>`}</div>`).addTo(chrLayer);n++}
+    $('#chrClear').hidden=!n;toast(n?n+' établissement(s) trouvé(s) dans un rayon de '+(r>=1000?r/1000+' km':r+' m'):'Aucun résultat ici. Élargis le rayon ou déplace la carte.')
+  }catch(e){toast('Recherche indisponible (serveur OpenStreetMap occupé ou pas de connexion). Réessaie dans un instant.',5000)}}
+
+/* ---------- liens Google Maps ---------- */
+const gmDir=c=>hasPos(c)?`https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}&travelmode=driving`:'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent([c.nom,c.adresse,c.ville].filter(Boolean).join(', '));
+function gmTour(date){const rest=tour(date).ids.map(byId).filter(c=>hasPos(c)&&!doneOn(c.id,date));if(!rest.length)return null;const pts=rest.slice(0,4),dest=pts[pts.length-1],wp=pts.slice(0,-1);
+  let u=`https://www.google.com/maps/dir/?api=1&destination=${dest.lat},${dest.lng}&travelmode=driving`;if(myPos)u+=`&origin=${myPos.lat},${myPos.lng}`;if(wp.length)u+='&waypoints='+wp.map(c=>c.lat+','+c.lng).join('%7C');return{u,cut:rest.length>4}}
+
+/* ---------- lecture d'une localisation collée ---------- */
+function parseLoc(s){s=String(s||'').trim();if(!s)return null;try{s=decodeURIComponent(s)}catch(e){}
+  const pats=[/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/,/@(-?\d+\.\d+),(-?\d+\.\d+)/,/[?&](?:q|query|ll|destination|daddr|center)=(?:loc:)?(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/,/geo:(-?\d+\.\d+),(-?\d+\.\d+)/,/(-?\d{1,2}\.\d{3,})\s*[,; ]\s*(-?\d{1,3}\.\d{3,})/];
+  for(const p of pats){const m=s.match(p);if(m){const lat=+m[1],lng=+m[2];if(Math.abs(lat)<=90&&Math.abs(lng)<=180)return{lat,lng}}}
+  if(/goo\.gl|maps\.app|g\.co\//.test(s))return{short:true};return{bad:true}}
+
+
+/* calcul de route : serveur OSRM public, puis serveur OpenStreetMap Allemagne en secours */
+const OSRM=['https://router.project-osrm.org/{svc}/v1/driving/','https://routing.openstreetmap.de/routed-car/{svc}/v1/driving/'];
+async function osrm(svc,coords,qs,ms=15000){let last;
+  for(const base of OSRM){try{const ctl=new AbortController();const tm=setTimeout(()=>ctl.abort(),ms);
+    const r=await fetch(base.replace('{svc}',svc)+coords+'?'+qs,{signal:ctl.signal});clearTimeout(tm);const js=await r.json();if(js.code==='Ok')return js;last=js.code}catch(e){last=e}}
+  throw last||new Error('osrm')}
+/* ---------- optimisation de tournée ---------- */
+function optimizeOrder(pts,start){
+  const a=start?[start,...pts]:[...pts];if(a.length<3)return pts;
+  const n=a.length,used=new Array(n).fill(false),path=[0];used[0]=true;
+  for(let k=1;k<n;k++){const l=a[path[path.length-1]];let b=-1,bd=Infinity;for(let j=0;j<n;j++)if(!used[j]){const d=hav(l,a[j]);if(d<bd){bd=d;b=j}}path.push(b);used[b]=true}
+  const D=(i,j)=>hav(a[path[i]],a[path[j]]);let imp=true,guard=0;
+  while(imp&&guard++<200){imp=false;for(let i=1;i<n-1;i++)for(let k=i+1;k<n;k++){const after=k+1<n?D(i,k+1)-D(k,k+1):0;const delta=D(i-1,k)-D(i-1,i)+after;if(delta<-1e-9){path.splice(i,k-i+1,...path.slice(i,k+1).reverse());imp=true}}}
+  const res=path.map(i=>a[i]);return start?res.slice(1):res}
+function startPoint(){return myPos?{lat:myPos.lat,lng:myPos.lng}:S.settings.depart}
+async function computeRoute(date){
+  const t=tour(date,true),st=startPoint();const ptsC=t.ids.map(byId).filter(hasPos);
+  const all=(st?[st]:[]).concat(ptsC.map(c=>({lat:+c.lat,lng:+c.lng})));
+  if(all.length<2){t.km=null;t.min=null;delete routeGeom[date];return}
+  let est=0;for(let i=1;i<all.length;i++)est+=hav(all[i-1],all[i]);
+  try{
+    const js=await osrm('route',all.map(p=>p.lng.toFixed(6)+','+p.lat.toFixed(6)).join(';'),'overview=full&geometries=geojson');const ro=js.routes[0];
+    t.km=+(ro.distance/1000).toFixed(1);t.min=Math.round(ro.duration/60);t.est=false;routeGeom[date]=ro.geometry.coordinates.map(c=>[c[1],c[0]])}
+  catch(e){t.km=+(est*1.3).toFixed(1);t.min=Math.round(est*1.3/30*60);t.est=true;delete routeGeom[date]}
+  t.fromStart=!!st;save()}
+async function optimize(){
+  const t=tour(dayDate,true);const done=t.ids.filter(id=>doneOn(id,dayDate)),todo=t.ids.filter(id=>!doneOn(id,dayDate));
+  const pos=todo.map(byId).filter(hasPos),nopos=todo.filter(id=>!hasPos(byId(id)));
+  if(pos.length<2){toast('Il faut au moins 2 clients localisés à visiter pour optimiser.');return}
+  const lastDone=done.map(byId).filter(hasPos).pop();const st=myPos?{lat:myPos.lat,lng:myPos.lng}:lastDone?{lat:+lastDone.lat,lng:+lastDone.lng}:S.settings.depart;
+  const ord=optimizeOrder(pos.map(c=>({id:c.id,lat:+c.lat,lng:+c.lng})),st);
+  t.ids=[...done,...ord.map(p=>p.id),...nopos];toast('Calcul de l’itinéraire…',8000);await computeRoute(dayDate);
+  toast(`Tournée optimisée : ${t.km} km${t.est?' (estimation à vol d’oiseau)':''}, ${fmtDur(t.min)} de route`+(st?'':' — sans point de départ, active le GPS pour partir de ta position'));renderAll()}
+
+/* ---------- vue Journée ---------- */
+function renderDay(){
+  const t=tour(dayDate),stops=t.ids.map(byId).filter(Boolean),done=stops.filter(c=>doneOn(c.id,dayDate)).length;
+  const isToday=dayDate===today(),pct=stops.length?Math.round(done/stops.length*100):0;
+  const sugg=S.clients.filter(c=>!t.ids.includes(c.id)&&(status(c,dayDate)==='late'||status(c,dayDate)==='due')).sort((a,b)=>ST_ORDER.indexOf(status(a,dayDate))-ST_ORDER.indexOf(status(b,dayDate)));
+  const nav=gmTour(dayDate);
+  let h=demoBanner()+`<button class="tripcta" data-act="tripOpen"><div style="flex:1"><b>Déplacement sur plusieurs villes</b><span>Itinéraire optimisé sur plusieurs jours, aller-retour${S.trip&&S.trip.plan?' · planning en cours : '+S.trip.plan.days.length+' jour(s)':''}</span></div><span aria-hidden="true" style="font-size:20px;color:var(--accent)">›</span></button><div class="daynav"><button class="btn icon" data-act="dayPrev" aria-label="Jour précédent">‹</button><input type="date" id="dayInput" value="${dayDate}"><button class="btn icon" data-act="dayNext" aria-label="Jour suivant">›</button>${isToday?'':'<button class="btn sm" data-act="dayToday">Aujourd’hui</button>'}</div>
+  <div class="sec-h">${esc(fmtDL(dayDate))}<small>${isToday?"aujourd'hui":dayDate<today()?'passé':'à venir'}</small></div>
+  <div class="kpis"><div class="kpi"><div class="v">${stops.length}</div><div class="l">Arrêts</div></div><div class="kpi"><div class="v">${done}/${stops.length}</div><div class="l">Visités</div></div><div class="kpi"><div class="v">${t.km!=null?t.km:'—'}</div><div class="l">Km${t.est?' (est.)':''}</div></div><div class="kpi"><div class="v">${fmtDur(t.min)}</div><div class="l">Route</div></div></div>
+  ${stops.length?`<div class="progress" aria-label="Avancement ${pct} %"><i style="width:${pct}%"></i></div>`:''}
+  <div class="btns"><button class="btn" data-act="pickOpen">+ Ajouter des clients</button><button class="btn pri" data-act="optimize" ${stops.filter(hasPos).length<2?'disabled':''}>Optimiser l’ordre</button>${nav?`<a class="btn" href="${nav.u}" target="_blank" rel="noopener">Naviguer${nav.cut?' (4 prochains)':''}</a>`:''}</div>`;
+  if(!stops.length)h+=`<div class="empty"><b>Aucune visite planifiée ce jour</b>Ajoute des clients à la journée, ou reprends les suggestions ci-dessous.</div>`;
+  else{h+='<div class="stops">';stops.forEach((c,i)=>{const v=doneOn(c.id,dayDate),s=status(c,dayDate);
+    h+=`<div class="stop${v?' done':''}" style="--c:${v?'var(--ok)':stColor(s)}"><div class="n">${v?'✓':i+1}</div><div class="who"><div class="nm">${esc(c.nom)}</div><div class="small muted">${esc([c.activite,c.ville].filter(Boolean).join(' · '))}${hasPos(c)?'':' · <b style="color:var(--late)">sans position</b>'}</div>${v?`<div class="small" style="margin-top:2px"><span class="pill" style="--c:${resColor(v.res)}">${resLabel(v.res)}</span> <span class="muted num">${v.dt.slice(11,16)}</span>${v.dist!=null?` <span class="muted">· check-in à ${v.dist<1000?v.dist+' m':(v.dist/1000).toFixed(1)+' km'}</span>`:''}</div>`:`<div class="small" style="margin-top:2px"><span class="pill" style="--c:${stColor(s)}">${ST[s][0]}</span> <span class="muted">${esc(sinceTxt(c))}</span></div>`}</div>
+    <div class="side"><button class="btn sm icon" data-act="up" data-i="${i}" aria-label="Monter" ${i===0?'disabled':''}>↑</button><button class="btn sm icon" data-act="down" data-i="${i}" aria-label="Descendre" ${i===stops.length-1?'disabled':''}>↓</button></div>
+    <div class="acts">${v?`<button class="btn sm" data-act="detail" data-id="${c.id}">Fiche</button>`:`<button class="btn sm pri" data-act="visit" data-id="${c.id}">Check-in / visite</button><a class="btn sm" href="${gmDir(c)}" target="_blank" rel="noopener">Itinéraire</a><button class="btn sm" data-act="detail" data-id="${c.id}">Fiche</button>`}<button class="btn sm danger" data-act="unstop" data-id="${c.id}" aria-label="Retirer de la journée">Retirer</button></div></div>`});h+='</div>';
+    if(t.km!=null&&!t.fromStart)h+=`<p class="small muted">Distance calculée sans point de départ. Active le GPS ou définis un point de départ dans Données, puis relance l’optimisation.</p>`}
+  if(sugg.length)h+=`<div class="card"><h3>Suggestions · ${sugg.length} client(s) en retard ou à relancer</h3><div class="hist">${sugg.slice(0,6).map(c=>{const s=status(c,dayDate);return`<div class="btns" style="align-items:center;flex-wrap:nowrap"><i class="dot" style="--c:${stColor(s)}"></i><div style="flex:1;min-width:0"><div style="font-weight:600">${esc(c.nom)}</div><div class="small muted">${ST[s][0]}${c.relance?' · relance '+fmtDS(c.relance):''} · ${esc(sinceTxt(c))}</div></div><button class="btn sm" style="flex:none" data-act="addStop" data-id="${c.id}">Ajouter</button></div>`}).join('')}</div>${sugg.length>1?`<div class="btns" style="margin-top:12px"><button class="btn ghost" data-act="addAllSugg">Tout ajouter (${sugg.length})</button></div>`:''}</div>`;
+  $('#jourBody').innerHTML=h;
+  $('#dayInput').onchange=e=>{if(e.target.value){dayDate=e.target.value;renderAll()}};
+}
+function addStops(ids,date=dayDate){const t=tour(date,true);let n=0;for(const id of ids)if(!t.ids.includes(id)){t.ids.push(id);n++}t.km=null;t.min=null;delete routeGeom[date];save();return n}
+
+/* ---------- vue Clients ---------- */
+function renderClients(){
+  const q=norm($('#cliSearch').value);const st=Object.fromEntries(S.clients.map(c=>[c.id,status(c)]));
+  const F={tous:['Tous',()=>true],late:['En retard',c=>st[c.id]==='late'],due:['À voir',c=>st[c.id]==='due'],never:['Jamais visités',c=>st[c.id]==='never'],prospect:['Prospects',c=>!!c.prospect],nopos:['Sans position',c=>!hasPos(c)]};
+  $('#cliChips').innerHTML=Object.entries(F).map(([k,[l,f]])=>`<button class="chip" data-act="cliFilter" data-f="${k}" aria-pressed="${cliFilter===k}">${l}<span class="num">${S.clients.filter(f).length}</span></button>`).join('');
+  let list=S.clients.filter(F[cliFilter][1]).filter(c=>!q||norm([c.nom,c.ville,c.activite,c.contact].join(' ')).includes(q));
+  list.sort((a,b)=>ST_ORDER.indexOf(st[a.id])-ST_ORDER.indexOf(st[b.id])||a.nom.localeCompare(b.nom,'fr'));
+  $('#cliList').innerHTML=!S.clients.length?`<div class="empty"><b>Aucun client</b>Ajoute ton premier client avec « + Client », ou importe un fichier Excel depuis l’onglet Données.</div>`:!list.length?`<div class="empty"><b>Aucun résultat</b>Change le filtre ou la recherche.</div>`:
+  '<div class="list">'+list.map(c=>`<button class="row" data-act="detail" data-id="${c.id}"><i class="dot" style="--c:${stColor(st[c.id])}"></i><div style="min-width:0"><div class="nm">${esc(c.nom)}</div><div class="meta">${esc([c.activite,c.ville].filter(Boolean).join(' · ')||'—')}${hasPos(c)?'':' · sans position'}</div></div><div class="r">${esc(sinceTxt(c))}${c.relance?`<br><span style="color:var(--due)">Relance ${fmtDS(c.relance)}</span>`:''}</div></button>`).join('')+'</div>';
+}
+$('#cliSearch').addEventListener('input',()=>renderClients());
+
+/* ---------- fiche client ---------- */
+function openDetail(id){const c=byId(id);if(!c)return;const s=status(c),vs=IDX.by[id]||[],inDay=tour(dayDate).ids.includes(id);
+  openSheet(`<h2>${esc(c.nom)}</h2><div class="btns" style="gap:6px;margin-bottom:12px"><span class="pill" style="--c:${stColor(s)}">${ST[s][0]}</span>${c.prospect?'<span class="pill" style="--c:var(--prospect)">Prospect</span>':''}<span class="small muted">${esc(sinceTxt(c))}</span></div>
+  <dl class="info">${c.activite?`<dt>Activité</dt><dd>${esc(c.activite)}</dd>`:''}${c.contact?`<dt>Contact</dt><dd>${esc(c.contact)}</dd>`:''}${c.tel?`<dt>Téléphone</dt><dd><a href="tel:${esc(c.tel.replace(/\s/g,''))}" style="color:var(--accent)">${esc(c.tel)}</a></dd>`:''}${c.ville||c.adresse?`<dt>Adresse</dt><dd>${esc([c.adresse,c.ville].filter(Boolean).join(', '))}</dd>`:''}<dt>Position</dt><dd class="num small">${hasPos(c)?(+c.lat).toFixed(5)+', '+(+c.lng).toFixed(5)+(c.locApprox?' (approximative)':''):'Non définie'}</dd><dt>Fréquence</dt><dd>tous les ${+c.freq||S.settings.freq} jours</dd>${c.relance?`<dt>Relance</dt><dd>${fmtDS(c.relance)}</dd>`:''}${c.notes?`<dt>Notes</dt><dd>${esc(c.notes)}</dd>`:''}</dl>
+  <div class="btns" style="margin-top:14px"><button class="btn pri" data-act="visit" data-id="${id}">Nouvelle visite</button>${inDay?'':`<button class="btn" data-act="addStop" data-id="${id}">+ Journée du ${esc(fmtD(dayDate))}</button>`}<a class="btn" href="${gmDir(c)}" target="_blank" rel="noopener">Itinéraire</a>${hasPos(c)?`<button class="btn" data-act="showOnMap" data-id="${id}">Sur la carte</button>`:''}<button class="btn" data-act="editClient" data-id="${id}">Modifier</button></div>
+  <h3 style="font:700 15px var(--f-display);margin:20px 0 10px">Historique · ${vs.length} visite(s)</h3>
+  ${vs.length?'<div class="hist">'+vs.map(v=>`<div class="h" style="--c:${resColor(v.res)}"><div class="btns" style="align-items:center;flex-wrap:nowrap"><div style="flex:1"><b>${esc(fmtD(v.dt.slice(0,10)))}</b> <span class="num small muted">${v.dt.slice(11,16)}</span> · <span style="color:${resColor(v.res)};font-weight:600">${resLabel(v.res)}</span></div><button class="btn sm icon" style="flex:none" data-act="delVisit" data-id="${v.id}" aria-label="Supprimer la visite">✕</button></div>${v.note?`<div class="small">${esc(v.note)}</div>`:''}${v.relance?`<div class="small muted">Relance prévue le ${fmtDS(v.relance)}</div>`:''}</div>`).join('')+'</div>':'<p class="muted small">Aucune visite enregistrée.</p>'}`)}
+
+/* ---------- formulaire client ---------- */
+let draftBack=null;
+function openClientForm(c={},back){draftBack=back||null;const isNew=!c.id;
+  openSheet(`<h2>${isNew?(c.prospect?'Nouveau prospect':'Nouveau client'):'Modifier le client'}</h2><div class="form">
+  <label class="field"><span>Nom *</span><input id="cfNom" value="${esc(c.nom)}" placeholder="Café Al Amal"></label>
+  <div class="two"><label class="field"><span>Activité</span><input id="cfAct" list="actList" value="${esc(c.activite)}" placeholder="Grossiste, café…"></label><label class="field"><span>Ville / quartier</span><input id="cfVille" value="${esc(c.ville)}" placeholder="Maârif"></label></div>
+  <datalist id="actList">${ACTS.map(a=>`<option value="${a}">`).join('')}</datalist>
+  <div class="two"><label class="field"><span>Contact</span><input id="cfContact" value="${esc(c.contact)}" placeholder="M. Benali"></label><label class="field"><span>Téléphone</span><input id="cfTel" type="tel" value="${esc(c.tel)}" placeholder="06 12 34 56 78"></label></div>
+  <div class="field"><span>Localisation</span><div class="btns"><button type="button" class="btn ghost" data-act="cfHere">J’y suis</button><button type="button" class="btn ghost" data-act="cfPlace">Sur la carte</button></div>
+  <input id="cfLoc" placeholder="…ou coller un lien Maps / WhatsApp / des coordonnées" style="margin-top:6px"><div class="locstat" id="cfLocStat"></div></div>
+  <input type="hidden" id="cfLat" value="${hasPos(c)?c.lat:''}"><input type="hidden" id="cfLng" value="${hasPos(c)?c.lng:''}">
+  <label class="field"><span>Adresse (facultatif)</span><input id="cfAdr" value="${esc(c.adresse)}" placeholder="Bd Zerktouni"></label>
+  <div class="two"><label class="field"><span>Visite tous les (jours)</span><input id="cfFreq" type="number" min="1" max="365" value="${esc(c.freq||S.settings.freq)}"></label><label class="field"><span>Relance le</span><input id="cfRel" type="date" value="${esc(c.relance||'')}"></label></div>
+  <label class="check"><input type="checkbox" id="cfPros" ${c.prospect?'checked':''}> Prospect (pas encore client)</label>
+  <label class="field"><span>Notes</span><textarea id="cfNotes" placeholder="Horaires, habitudes, concurrents…">${esc(c.notes)}</textarea></label>
+  <div class="btns"><button class="btn ghost" data-act="closeSheet">Annuler</button><button class="btn pri" data-act="cfSave">Enregistrer</button></div>
+  ${isNew?'':'<button class="btn danger block" data-act="delClient">Supprimer ce client</button>'}</div>`);
+  $('#sheet').dataset.cid=c.id||'';$('#sheet').dataset.add=c._addDay||'';
+  setLocStat(hasPos(c)?(c._src?'✓ '+c._src:'✓ Position enregistrée'):'',hasPos(c)?'ok':'');
+  $('#cfLoc').addEventListener('input',e=>{const r=parseLoc(e.target.value);if(!r){setLocStat('');return}
+    if(r.short)setLocStat('Lien court sans coordonnées : ouvre-le dans Google Maps, appuie longuement sur le point, copie les coordonnées et colle-les ici.','warn');
+    else if(r.bad)setLocStat('Format non reconnu. Exemple accepté : 33.5731, -7.5898','warn');
+    else{$('#cfLat').value=r.lat;$('#cfLng').value=r.lng;setLocStat(`✓ Position lue : ${r.lat.toFixed(5)}, ${r.lng.toFixed(5)}`,'ok')}})}
+function setLocStat(t,k){const e=$('#cfLocStat');if(!e)return;e.textContent=t;e.style.color=k==='ok'?'var(--ok)':k==='warn'?'var(--due)':'var(--muted)'}
+function readClientForm(){return{id:$('#sheet').dataset.cid||undefined,nom:$('#cfNom').value.trim(),activite:$('#cfAct').value.trim(),ville:$('#cfVille').value.trim(),contact:$('#cfContact').value.trim(),tel:$('#cfTel').value.trim(),adresse:$('#cfAdr').value.trim(),
+  lat:$('#cfLat').value===''?null:+$('#cfLat').value,lng:$('#cfLng').value===''?null:+$('#cfLng').value,freq:Math.max(1,+$('#cfFreq').value||S.settings.freq),relance:$('#cfRel').value||null,prospect:$('#cfPros').checked,notes:$('#cfNotes').value.trim(),_addDay:$('#sheet').dataset.add||''}}
+function saveClient(){const f=readClientForm();if(!f.nom){toast('Le nom est obligatoire.');$('#cfNom').focus();return}
+  const add=f._addDay;delete f._addDay;delete f._src;
+  if(f.id){const c=byId(f.id);const posChanged=c.lat!==f.lat||c.lng!==f.lng;Object.assign(c,f);if(posChanged)delete c.locApprox}
+  else{f.id=uid();f.createdAt=today();S.clients.push(f)}
+  save();if(add)addStops([f.id],add);closeSheet();toast('Client enregistré');renderAll();if(!hasPos(f))toast('Client enregistré sans position : il n’apparaîtra pas sur la carte.',4200)}
+
+/* ---------- formulaire visite / check-in ---------- */
+function openVisitForm(cid){const c=byId(cid);if(!c)return;const d=dayDate;
+  openSheet(`<h2>Visite · ${esc(c.nom)}</h2><p class="small muted" id="vfGeo">${hasPos(c)?'Vérification de ta position…':''}</p><div class="form">
+  <div class="field"><span>Résultat</span><div class="results">${RES.map(([k,l,v])=>`<button type="button" data-act="vfRes" data-k="${k}" style="--c:var(${v})" aria-pressed="false">${l}</button>`).join('')}</div></div>
+  <div class="two"><label class="field"><span>Date</span><input type="date" id="vfDate" value="${d}"></label><label class="field"><span>Heure</span><input type="time" id="vfTime" value="${nowTime()}"></label></div>
+  <label class="field"><span>Compte rendu</span><textarea id="vfNote" placeholder="Ce qui a été dit, besoins, prochaine étape…"></textarea></label>
+  <div class="field"><span>Prochaine relance</span><input type="date" id="vfRel"><div class="btns" style="margin-top:6px"><button type="button" class="btn sm ghost" data-act="vfPlus" data-n="3">+3 j</button><button type="button" class="btn sm ghost" data-act="vfPlus" data-n="7">+7 j</button><button type="button" class="btn sm ghost" data-act="vfPlus" data-n="14">+14 j</button><button type="button" class="btn sm ghost" data-act="vfPlus" data-n="30">+30 j</button><button type="button" class="btn sm ghost" data-act="vfPlus" data-n="0">Aucune</button></div></div>
+  <div class="btns"><button class="btn ghost" data-act="closeSheet">Annuler</button><button class="btn pri" data-act="vfSave">Enregistrer la visite</button></div></div>`);
+  $('#sheet').dataset.cid=cid;$('#sheet').dataset.res='';$('#sheet').dataset.dist='';
+  if(hasPos(c))locate(p=>{const g=$('#vfGeo');if(!g)return;if(p&&!p.manual){const m=Math.round(hav(p,{lat:+c.lat,lng:+c.lng})*1000);$('#sheet').dataset.dist=m;g.textContent=`Check-in : tu es à ${m<1000?m+' m':(m/1000).toFixed(1)+' km'} du client.`;g.style.color=m<=300?'var(--ok)':'var(--due)'}else g.textContent='Position GPS indisponible : la visite sera enregistrée sans contrôle de distance.'},true)}
+function saveVisit(){const sh=$('#sheet'),res=sh.dataset.res;if(!res){toast('Choisis un résultat de visite.');return}
+  const c=byId(sh.dataset.cid),date=$('#vfDate').value||today(),rel=$('#vfRel').value||null;
+  const v={id:uid(),clientId:c.id,dt:date+'T'+($('#vfTime').value||nowTime()),res,note:$('#vfNote').value.trim(),relance:rel,dist:sh.dataset.dist===''?null:+sh.dataset.dist};
+  S.visites.push(v);c.relance=rel;if(res==='commande'&&c.prospect)c.prospect=false;
+  const t=tour(date,true);if(!t.ids.includes(c.id))t.ids.push(c.id);
+  save();closeSheet();toast('Visite enregistrée');renderAll()}
+
+/* ---------- sélection de clients pour la journée ---------- */
+function openPicker(){const t=tour(dayDate);const list=S.clients.filter(c=>!t.ids.includes(c.id)).sort((a,b)=>ST_ORDER.indexOf(status(a,dayDate))-ST_ORDER.indexOf(status(b,dayDate))||a.nom.localeCompare(b.nom,'fr'));
+  if(!list.length){toast('Tous tes clients sont déjà dans cette journée.');return}
+  openSheet(`<h2>Ajouter au ${esc(fmtD(dayDate))}</h2><p class="small muted">Triés par priorité : en retard d’abord.</p><input class="search" id="pkQ" type="search" placeholder="Filtrer…" style="margin:10px 0"><div class="pick" id="pkList">${list.map(c=>{const s=status(c,dayDate);return`<label data-n="${esc(norm(c.nom+' '+c.ville+' '+c.activite))}"><input type="checkbox" value="${c.id}"><i class="dot" style="--c:${stColor(s)}"></i><span><b style="font-weight:600">${esc(c.nom)}</b><br><span class="small muted">${ST[s][0]} · ${esc(c.ville||'')}${hasPos(c)?'':' · sans position'}</span></span></label>`}).join('')}</div><div class="btns" style="margin-top:12px"><button class="btn ghost" data-act="closeSheet">Annuler</button><button class="btn pri" data-act="pkAdd">Ajouter la sélection</button></div>`);
+  $('#pkQ').addEventListener('input',e=>{const q=norm(e.target.value);for(const l of $$('#pkList label'))l.hidden=q&&!l.dataset.n.includes(q)})}
+
+/* ---------- statistiques ---------- */
+function periodRange(p){const t=today();if(p==='7')return[addDays(t,-6),t,'7 derniers jours'];if(p==='30')return[addDays(t,-29),t,'30 derniers jours'];if(p==='mois')return[t.slice(0,8)+'01',t,new Date().toLocaleDateString('fr-FR',{month:'long',year:'numeric'})];return['0000-01-01',t,'Depuis le début']}
+function computeStats(p){const[from,to,label]=periodRange(p);const vs=S.visites.filter(v=>{const d=v.dt.slice(0,10);return d>=from&&d<=to});
+  const seen=new Set(vs.map(v=>v.clientId)),actifs=S.clients.filter(c=>!c.prospect),days=new Set(vs.map(v=>v.dt.slice(0,10)));
+  let km=0,kmEst=false;for(const[d,t]of Object.entries(S.tournees))if(d>=from&&d<=to&&t.km!=null){km+=t.km;if(t.est)kmEst=true}
+  const res=RES.map(([k,l])=>[k,l,vs.filter(v=>v.res===k).length]);
+  const wd=[0,0,0,0,0,0,0];for(const v of vs){const g=new Date(v.dt.slice(0,10)+'T12:00').getDay();wd[(g+6)%7]++}
+  const seuil=S.settings.seuil;const oubli=actifs.map(c=>{const lv=IDX.last[c.id];return{c,d:lv?daysBetween(lv.slice(0,10),today()):Infinity}}).filter(x=>x.d>=seuil).sort((a,b)=>b.d-a.d);
+  const act={};for(const v of vs){const c=byId(v.clientId);const a=(c&&c.activite)||'Non renseignée';act[a]=(act[a]||0)+1}
+  const cov=actifs.length?Math.round(actifs.filter(c=>seen.has(c.id)).length/actifs.length*100):0;
+  const newC=S.clients.filter(c=>c.createdAt&&c.createdAt>=from&&c.createdAt<=to).length;
+  const rel=S.clients.filter(c=>c.relance&&c.relance<=today()).length;
+  return{from,to,label,vs,seen:seen.size,days:days.size,km:+km.toFixed(1),kmEst,res,wd,oubli,act:Object.entries(act).sort((a,b)=>b[1]-a[1]).slice(0,6),cov,actifs:actifs.length,newC,rel,moy:days.size?(vs.length/days.size).toFixed(1):'0'}}
+function renderStats(){const s=computeStats(statsPeriod);const maxR=Math.max(1,...s.res.map(r=>r[2])),maxW=Math.max(1,...s.wd),maxA=Math.max(1,...s.act.map(a=>a[1]));
+  const taux=s.vs.length?Math.round(s.res.find(r=>r[0]==='commande')[2]/s.vs.length*100):0;
+  $('#statsBody').innerHTML=demoBanner()+`<div class="seg">${[['7','7 jours'],['30','30 jours'],['mois','Ce mois'],['tout','Tout']].map(([k,l])=>`<button data-act="period" data-p="${k}" aria-pressed="${statsPeriod===k}">${l}</button>`).join('')}</div>
+  <div class="kpis"><div class="kpi"><div class="v">${s.vs.length}</div><div class="l">Visites</div></div><div class="kpi"><div class="v">${s.seen}</div><div class="l">Clients vus</div></div><div class="kpi"><div class="v">${s.cov}%</div><div class="l">Couverture</div></div><div class="kpi"><div class="v">${s.km}</div><div class="l">Km tournée${s.kmEst?' *':''}</div></div></div>
+  <div class="kpis"><div class="kpi"><div class="v">${s.days}</div><div class="l">Jours terrain</div></div><div class="kpi"><div class="v">${s.moy}</div><div class="l">Visites / jour</div></div><div class="kpi"><div class="v">${taux}%</div><div class="l">Taux commande</div></div><div class="kpi"><div class="v">${s.rel}</div><div class="l">Relances dues</div></div></div>
+  <p class="small muted" style="margin:-4px 0 0">Couverture = part de tes ${s.actifs} clients (hors prospects) vus sur la période. Km = somme des itinéraires calculés des journées${s.kmEst?' ; * contient des estimations à vol d’oiseau':''}.</p>
+  <div class="card"><h3>Résultats des visites</h3><div class="bars">${s.res.map(([k,l,n])=>`<div class="bar" style="--c:${resColor(k)}"><span>${l}</span><div class="t"><i style="width:${n/maxR*100}%"></i></div><span class="num">${n}</span></div>`).join('')}</div></div>
+  <div class="card"><h3>Visites par jour de semaine</h3><div class="cols">${['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'].map((d,i)=>`<div class="col"><b>${s.wd[i]||''}</b><i style="height:${s.wd[i]/maxW*80}%"></i><span>${d}</span></div>`).join('')}</div></div>
+  ${s.act.length?`<div class="card"><h3>Visites par activité</h3><div class="bars">${s.act.map(([a,n])=>`<div class="bar" style="--c:var(--accent)"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a)}</span><div class="t"><i style="width:${n/maxA*100}%"></i></div><span class="num">${n}</span></div>`).join('')}</div></div>`:''}
+  <div class="card"><h3 style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">Non visités depuis <input class="inline-num num" type="number" id="seuilIn" min="1" max="365" value="${S.settings.seuil}"> jours · ${s.oubli.length}</h3>
+  ${s.oubli.length?'<div class="hist">'+s.oubli.slice(0,15).map(({c,d})=>`<div class="btns" style="align-items:center;flex-wrap:nowrap"><div style="flex:1;min-width:0"><button class="btn sm" style="border:0;padding:0;min-height:0;background:none;font-weight:600" data-act="detail" data-id="${c.id}">${esc(c.nom)}</button><div class="small muted">${d===Infinity?'Jamais visité':d+' jours'}${c.ville?' · '+esc(c.ville):''}</div></div><button class="btn sm" style="flex:none" data-act="planToday" data-id="${c.id}">Planifier aujourd’hui</button></div>`).join('')+'</div>'+(s.oubli.length>15?`<p class="small muted">+ ${s.oubli.length-15} autre(s), visibles dans l’export Excel.</p>`:''):'<p class="small muted">Aucun client au-delà de ce seuil.</p>'}</div>
+  <div class="btns"><button class="btn" data-act="exportXlsx">Exporter Excel</button><button class="btn pri" data-act="exportPdf">Rapport PDF (${esc(s.label)})</button></div>`;
+  $('#seuilIn').onchange=e=>{S.settings.seuil=Math.max(1,+e.target.value||30);save();renderStats()}}
+
+/* ---------- exports ---------- */
+function stamp(){return today()}
+function exportXlsx(){if(!window.XLSX){toast('Module Excel non chargé : vérifie la connexion puis recharge la page.');return}buildIndex();
+  const cl=S.clients.map(c=>{const lv=IDX.last[c.id];return{'Nom':c.nom,'Activité':c.activite||'','Contact':c.contact||'','Téléphone':c.tel||'','Ville':c.ville||'','Adresse':c.adresse||'','Latitude':hasPos(c)?+c.lat:'','Longitude':hasPos(c)?+c.lng:'','Fréquence (j)':+c.freq||S.settings.freq,'Prospect':c.prospect?'Oui':'Non','Statut':ST[status(c)][0],'Dernière visite':lv?fmtDS(lv.slice(0,10)):'','Jours depuis':lv?daysBetween(lv.slice(0,10),today()):'','Relance':c.relance?fmtDS(c.relance):'','Notes':c.notes||''}});
+  const vi=[...S.visites].sort((a,b)=>b.dt.localeCompare(a.dt)).map(v=>{const c=byId(v.clientId)||{};return{'Date':fmtDS(v.dt.slice(0,10)),'Heure':v.dt.slice(11,16),'Client':c.nom||'(supprimé)','Activité':c.activite||'','Ville':c.ville||'','Résultat':resLabel(v.res),'Compte rendu':v.note||'','Relance prévue':v.relance?fmtDS(v.relance):'','Distance check-in (m)':v.dist??''}});
+  const to=Object.entries(S.tournees).filter(([,t])=>t.ids.length).sort((a,b)=>b[0].localeCompare(a[0])).map(([d,t])=>({'Date':fmtDS(d),'Arrêts':t.ids.length,'Visités':t.ids.filter(id=>doneOn(id,d)).length,'Km':t.km??'','Estimation':t.est?'Oui':'','Durée route (min)':t.min??'','Ordre':t.ids.map(id=>(byId(id)||{}).nom).filter(Boolean).join(' → ')}));
+  const wb=XLSX.utils.book_new();const add=(rows,name,w)=>{const ws=XLSX.utils.json_to_sheet(rows.length?rows:[{}]);ws['!cols']=w.map(x=>({wch:x}));XLSX.utils.book_append_sheet(wb,ws,name)};
+  add(cl,'Clients',[26,14,16,15,14,24,10,10,9,8,13,13,9,11,30]);add(vi,'Visites',[11,7,26,14,14,12,40,13,12]);add(to,'Tournées',[11,7,7,7,9,10,60]);
+  XLSX.writeFile(wb,'RoutePro-'+stamp()+'.xlsx');toast('Fichier Excel généré')}
+function exportPdf(){if(!window.jspdf){toast('Module PDF non chargé : vérifie la connexion puis recharge la page.');return}
+  const s=computeStats(statsPeriod),{jsPDF}=window.jspdf,doc=new jsPDF();const G=[13,107,91];
+  doc.setFontSize(17);doc.setTextColor(20,32,28);doc.text("Rapport d'activité commerciale",14,18);doc.setFontSize(10);doc.setTextColor(90,106,100);
+  doc.text(`Période : ${s.label}${statsPeriod==='tout'?'':' ('+fmtDS(s.from)+' au '+fmtDS(s.to)+')'}  -  édité le ${fmtDS(today())}`,14,25);
+  const taux=s.vs.length?Math.round(s.res.find(r=>r[0]==='commande')[2]/s.vs.length*100):0;
+  doc.autoTable({startY:31,head:[['Indicateur','Valeur']],body:[['Visites',s.vs.length],['Clients vus',s.seen],['Couverture du portefeuille',s.cov+' % ('+s.actifs+' clients)'],['Jours terrain',s.days],['Visites par jour',s.moy],['Km de tournée',s.km+(s.kmEst?' (estimations incluses)':'')],['Taux de commande',taux+' %'],['Nouveaux clients / prospects',s.newC],['Relances en attente',s.rel]],theme:'grid',headStyles:{fillColor:G},styles:{fontSize:10},columnStyles:{0:{cellWidth:80}}});
+  doc.autoTable({startY:doc.lastAutoTable.finalY+7,head:[['Résultat','Visites','Part']],body:s.res.map(([,l,n])=>[l,n,s.vs.length?Math.round(n/s.vs.length*100)+' %':'-']),theme:'grid',headStyles:{fillColor:G},styles:{fontSize:10}});
+  if(s.vs.length)doc.autoTable({startY:doc.lastAutoTable.finalY+7,head:[['Date','Client','Ville','Résultat','Compte rendu']],body:[...s.vs].sort((a,b)=>b.dt.localeCompare(a.dt)).map(v=>{const c=byId(v.clientId)||{};return[fmtDS(v.dt.slice(0,10))+' '+v.dt.slice(11,16),c.nom||'',c.ville||'',resLabel(v.res),v.note||'']}),theme:'striped',headStyles:{fillColor:G},styles:{fontSize:8.5,cellPadding:1.8},columnStyles:{0:{cellWidth:26},1:{cellWidth:38},2:{cellWidth:24},3:{cellWidth:22}}});
+  if(s.oubli.length)doc.autoTable({startY:doc.lastAutoTable.finalY+7,head:[[`Clients non visités depuis ${S.settings.seuil} jours ou plus`,'Jours','Ville']],body:s.oubli.map(({c,d})=>[c.nom,d===Infinity?'jamais':d,c.ville||'']),theme:'grid',headStyles:{fillColor:[194,67,46]},styles:{fontSize:9}});
+  const rl=S.clients.filter(c=>c.relance).sort((a,b)=>a.relance.localeCompare(b.relance));
+  if(rl.length)doc.autoTable({startY:doc.lastAutoTable.finalY+7,head:[['Relances planifiées','Date','Téléphone']],body:rl.map(c=>[c.nom,fmtDS(c.relance),c.tel||'']),theme:'grid',headStyles:{fillColor:[207,127,20]},styles:{fontSize:9}});
+  doc.save('Rapport-RoutePro-'+stamp()+'.pdf');toast('Rapport PDF généré')}
+function downloadText(name,text,type){const b=new Blob([text],{type});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500)}
+function templateXlsx(){if(!window.XLSX){toast('Module Excel non chargé.');return}const ws=XLSX.utils.json_to_sheet([{'Nom':'Café Al Amal','Activité':'Café','Contact':'M. Benali','Téléphone':'0612345678','Ville':'Casablanca','Adresse':'Bd Zerktouni','Localisation':'33.5890, -7.6290','Fréquence':14,'Notes':'Ouvert dès 7h'},{'Nom':'Supérette Nour','Activité':'Supérette','Contact':'','Téléphone':'0522000000','Ville':'Rabat','Adresse':'Agdal','Localisation':'https://maps.google.com/?q=34.0000,-6.8500','Fréquence':30,'Notes':''}]);ws['!cols']=[{wch:22},{wch:12},{wch:14},{wch:13},{wch:12},{wch:18},{wch:34},{wch:10},{wch:20}];const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Clients');XLSX.writeFile(wb,'Modele-import-clients.xlsx')}
+
+/* ---------- import ---------- */
+const COLS={nom:['nom','client','raisonsociale','name','enseigne','societe','etablissement','nomclient'],activite:['activite','type','categorie','secteur','typeclient'],contact:['contact','responsable','gerant','interlocuteur'],tel:['tel','telephone','phone','gsm','mobile','portable','numero','teléphone'],ville:['ville','city','localite','quartier'],adresse:['adresse','address','rue'],lat:['lat','latitude'],lng:['lng','lon','long','longitude'],loc:['localisation','lien','maps','gps','position','coordonnees','location','googlemaps'],freq:['frequence','freq','frequencejours'],notes:['notes','note','commentaire','commentaires','remarque','remarques']};
+let pending=null;
+function readImport(file){if(!window.XLSX){toast('Module Excel non chargé : vérifie la connexion.');return}const r=new FileReader();r.onload=e=>{try{const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:'',raw:false});prepImport(rows)}catch(err){toast('Fichier illisible. Utilise un .xlsx ou un .csv avec une ligne d’en-têtes.',5000)}};r.readAsArrayBuffer(file)}
+function prepImport(rows){if(!rows.length){toast('Le fichier ne contient aucune ligne.');return}
+  const heads=Object.keys(rows[0]),map={};for(const h of heads){const n=norm(h);for(const[k,al]of Object.entries(COLS))if(!map[k]&&al.map(norm).includes(n))map[k]=h}
+  if(!map.nom){openSheet(`<h2>Colonne « Nom » introuvable</h2><p class="muted">En-têtes lus : ${esc(heads.join(', '))}.</p><p class="muted">Renomme la colonne du nom du client en « Nom » (ou télécharge le modèle) puis réessaie.</p><button class="btn pri block" data-act="closeSheet">Compris</button>`);return}
+  const items=[];for(const r of rows){const g=k=>map[k]?String(r[map[k]]).trim():'';const nom=g('nom');if(!nom)continue;let lat=null,lng=null;
+    const la=parseFloat(g('lat').replace(',','.')),lo=parseFloat(g('lng').replace(',','.'));if(Number.isFinite(la)&&Number.isFinite(lo)){lat=la;lng=lo}else if(g('loc')){const p=parseLoc(g('loc'));if(p&&p.lat!=null){lat=p.lat;lng=p.lng}}
+    items.push({nom,activite:g('activite'),contact:g('contact'),tel:g('tel'),ville:g('ville'),adresse:g('adresse'),lat,lng,freq:+g('freq')||S.settings.freq,notes:g('notes')})}
+  const keyOf=c=>norm(c.nom)+'|'+norm(c.ville);const ex=new Map(S.clients.map(c=>[keyOf(c),c]));const dup=items.filter(i=>ex.has(keyOf(i))).length,withPos=items.filter(hasPos).length;
+  pending={items,keyOf};
+  openSheet(`<h2>Importer ${items.length} client(s)</h2><p class="small muted">Colonnes reconnues : ${Object.keys(map).map(k=>esc(map[k])+' → '+k).join(', ')}</p>
+  <div class="kpis k3" style="margin:12px 0"><div class="kpi"><div class="v">${items.length}</div><div class="l">Lignes</div></div><div class="kpi"><div class="v">${withPos}</div><div class="l">Avec position</div></div><div class="kpi"><div class="v">${dup}</div><div class="l">Déjà présents</div></div></div>
+  <div class="scrollx"><table class="prev"><thead><tr><th>Nom</th><th>Activité</th><th>Ville</th><th>Tél.</th><th>Position</th></tr></thead><tbody>${items.slice(0,6).map(i=>`<tr><td>${esc(i.nom)}</td><td>${esc(i.activite)}</td><td>${esc(i.ville)}</td><td>${esc(i.tel)}</td><td>${hasPos(i)?'✓':'—'}</td></tr>`).join('')}</tbody></table></div>
+  ${items.length>6?`<p class="small muted">… et ${items.length-6} autre(s).</p>`:''}
+  ${dup?`<label class="check" style="margin-top:12px"><input type="checkbox" id="imUpd" checked> Mettre à jour les ${dup} client(s) déjà présents (même nom et ville)</label>`:''}
+  <label class="check" style="margin-top:8px"><input type="checkbox" id="imPros"> Importer comme prospects</label>
+  ${items.length-withPos?`<p class="small muted">${items.length-withPos} client(s) sans position : tu pourras les localiser ensuite depuis leur fiche, ou par adresse dans l’onglet Données.</p>`:''}
+  <div class="btns" style="margin-top:12px"><button class="btn ghost" data-act="closeSheet">Annuler</button><button class="btn pri" data-act="imGo">Importer</button></div>`)}
+function doImport(){const upd=$('#imUpd')?$('#imUpd').checked:false,pros=$('#imPros').checked;const ex=new Map(S.clients.map(c=>[pending.keyOf(c),c]));let n=0,u=0,s=0;
+  for(const i of pending.items){const c=ex.get(pending.keyOf(i));if(c){if(upd){for(const k in i)if(i[k]!==''&&i[k]!=null)c[k]=i[k];u++}else s++}else{S.clients.push({...i,id:uid(),createdAt:today(),prospect:pros});n++}}
+  save();pending=null;closeSheet();toast(`${n} ajouté(s), ${u} mis à jour${s?', '+s+' ignoré(s)':''}`,4500);renderAll()}
+
+/* ---------- géolocalisation par adresse (Nominatim) ---------- */
+let geoRunning=false;
+async function geocodeAll(){const list=S.clients.filter(c=>!hasPos(c)&&(c.adresse||c.ville));if(!list.length){toast('Aucun client sans position avec une adresse ou une ville.');return}
+  geoRunning=true;renderPlus();let ok=0;
+  for(let i=0;i<list.length&&geoRunning;i++){const c=list[i];toast(`Localisation ${i+1}/${list.length} : ${c.nom}`,3000);
+    try{const q=[c.adresse,c.ville].filter(Boolean).join(', ');const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=ma&q='+encodeURIComponent(q),{headers:{'Accept-Language':'fr'}});const js=await r.json();
+      if(js[0]){c.lat=+(+js[0].lat).toFixed(6);c.lng=+(+js[0].lon).toFixed(6);c.locApprox=true;ok++;save()}}catch(e){}
+    await new Promise(r=>setTimeout(r,1100))}
+  geoRunning=false;toast(`${ok}/${list.length} client(s) localisé(s). Positions approximatives : vérifie-les sur la carte.`,5500);renderAll()}
+
+/* ---------- vue Données ---------- */
+function renderPlus(){const nopos=S.clients.filter(c=>!hasPos(c)).length,nogeo=S.clients.filter(c=>!hasPos(c)&&(c.adresse||c.ville)).length,demo=S.clients.some(c=>c.demo);
+  const https=location.protocol==='https:';
+  $('#plusBody').innerHTML=`<div class="card"><h3>Importer des clients</h3><p class="small muted" style="margin:0 0 10px">Fichier Excel ou CSV avec une ligne d’en-têtes. Colonnes reconnues : Nom (obligatoire), Activité, Contact, Téléphone, Ville, Adresse, Latitude / Longitude ou Localisation (lien Maps ou coordonnées), Fréquence, Notes.</p><div class="btns"><button class="btn pri" data-act="importPick">Choisir un fichier</button><button class="btn" data-act="template">Modèle Excel</button></div></div>
+  <div class="card"><h3>Exporter</h3><p class="small muted" style="margin:0 0 10px">Excel : 3 feuilles (Clients, Visites, Tournées). PDF : rapport de la période choisie dans Stats (${esc(periodRange(statsPeriod)[2])}).</p><div class="btns"><button class="btn" data-act="exportXlsx">Excel</button><button class="btn" data-act="exportPdf">Rapport PDF</button></div></div>
+  <div class="card"><h3>Sauvegarde</h3><p class="small muted" style="margin:0 0 10px">Tes données sont gardées uniquement dans ce navigateur, sur ce téléphone. Si tu vides le cache ou changes d’appareil, elles sont perdues : fais une sauvegarde régulière.</p><div class="btns"><button class="btn pri" data-act="backup">Sauvegarder (.json)</button><button class="btn" data-act="restorePick">Restaurer</button></div>${storageOK?'':'<p class="small" style="color:var(--late)">Le stockage du navigateur est bloqué : rien n’est enregistré entre deux ouvertures.</p>'}</div>
+  <div class="card"><h3>Réglages</h3><div class="form" style="margin-top:0"><label class="field"><span>Fréquence de visite par défaut (jours)</span><input type="number" id="setFreq" min="1" max="365" value="${S.settings.freq}"></label>
+  <div class="field"><span>Point de départ (si GPS indisponible)</span><div class="small">${S.settings.depart?`<span class="num">${S.settings.depart.lat.toFixed(5)}, ${S.settings.depart.lng.toFixed(5)}</span>`:'<span class="muted">Non défini</span>'}</div><div class="btns" style="margin-top:6px"><button class="btn sm" data-act="departHere">Ma position actuelle</button><button class="btn sm" data-act="departPlace">Placer sur la carte</button>${S.settings.depart?'<button class="btn sm danger" data-act="departClear">Effacer</button>':''}</div></div></div></div>
+  <div class="card"><h3>Clients sans position · ${nopos}</h3><p class="small muted" style="margin:0 0 10px">Recherche approximative par adresse et ville (OpenStreetMap, 1 client par seconde). La couverture des adresses au Maroc est incomplète : vérifie chaque point sur la carte.</p><button class="btn" data-act="geocode" ${nogeo&&!geoRunning?'':'disabled'}>${geoRunning?'En cours…':`Localiser par adresse (${nogeo})`}</button></div>
+  <div class="card"><h3>GPS et installation</h3><p class="small muted" style="margin:0">${https?'Page en https : le GPS fonctionne si tu autorises la localisation.':'Cette page n’est pas en https : le navigateur bloque le GPS. Héberge le fichier gratuitement (par exemple sur app.netlify.com/drop ou tiiny.host) puis ouvre le lien sur ton téléphone.'} Pour l’avoir comme une appli : menu du navigateur → « Ajouter à l’écran d’accueil ».</p></div>
+  <div class="card"><h3>Effacer</h3><div class="btns">${demo?'<button class="btn" data-act="clearDemo">Effacer les exemples</button>':''}<button class="btn danger" data-act="clearAll">Tout effacer</button></div></div>`;
+  $('#setFreq').onchange=e=>{S.settings.freq=Math.max(1,+e.target.value||14);save()}}
+
+function demoBanner(){return S.clients.some(c=>c.demo)?`<div class="banner"><span>Données d’exemple affichées (clients fictifs à Casablanca).</span><button class="btn sm" data-act="clearDemo">Effacer les exemples</button></div>`:''}
+
+/* ---------- données d'exemple ---------- */
+function seed(){const t=today();const C=[['Café Maâmora','Café','Maârif',33.5862,-7.6326,14],['Supérette Al Baraka','Supérette','Hay Hassani',33.5655,-7.6655,21],['Hôtel Gauthier','Hôtel','Gauthier',33.5928,-7.6262,30],['Restaurant Dar Zitoun','Restaurant','Bourgogne',33.5994,-7.6418,14],['Grossiste Derb Omar','Grossiste','Derb Omar',33.5905,-7.6052,7],['Boulangerie Ennour','Boulangerie','Aïn Sebaâ',33.6046,-7.5352,21],['Pharmacie Anfa','Pharmacie','Anfa',33.5878,-7.6598,30],['Café Les Palmiers','Café','Aïn Diab',33.5921,-7.6849,14],['Épicerie Sidi Maârouf','Épicerie','Sidi Maârouf',33.5302,-7.6448,21]];
+  const ids=C.map(([nom,activite,ville,lat,lng,freq],i)=>{const id='demo'+i;S.clients.push({id,nom,activite,ville,lat,lng,freq,contact:'',tel:'',adresse:'',notes:'',prospect:i===7,demo:true,createdAt:addDays(t,-60)});return id});
+  const V=[[0,-3,'commande'],[0,-18,'interesse'],[1,-26,'absent'],[1,-40,'commande'],[2,-12,'interesse'],[3,-9,'commande'],[3,-22,'relancer'],[4,-2,'commande'],[4,-9,'commande'],[4,-16,'refus'],[5,-33,'interesse'],[6,-5,'absent'],[6,-27,'commande'],[0,-31,'commande'],[2,-44,'commande']];
+  for(const[i,d,res]of V)S.visites.push({id:uid(),clientId:ids[i],dt:addDays(t,d)+'T'+pad(9+(Math.abs(d)%8))+':'+pad((Math.abs(d)*7)%60),res,note:res==='commande'?'Commande passée, stock à surveiller.':res==='refus'?'Pas intéressé pour le moment.':'',relance:null,dist:null,demo:true});
+  S.clients[3].relance=addDays(t,-1);S.tournees[t]={ids:[ids[1],ids[3],ids[5],ids[7],ids[8]],demo:true};S.seeded=true;save()}
+function clearDemo(){S.clients=S.clients.filter(c=>!c.demo);S.visites=S.visites.filter(v=>!v.demo);for(const[d,t]of Object.entries(S.tournees)){t.ids=t.ids.filter(id=>byId(id));if(!t.ids.length)delete S.tournees[d]}save();fitted=true;toast('Exemples effacés');renderAll()}
+
+/* ---------- déplacement multi-villes ---------- */
+const DAYCOL=['#0D6B5B','#C2432E','#6B54BF','#CF7F14','#1F6FE0','#2F8A4E','#B0408A','#5A6A64'];
+const tripLayer=L.layerGroup().addTo(map);
+let tripGeom={},tripBusy=false;
+const toMin=s=>{const[h,m]=String(s||'0:0').split(':').map(Number);return h*60+(m||0)};
+const fmtH=m=>{m=Math.round(m);const d=Math.floor(m/1440);m-=d*1440;return pad(Math.floor(m/60))+':'+pad(m%60)+(d?' (+'+d+' j)':'')};
+const cityKey=c=>norm(c.ville)||'_';
+function tripInit(){if(!S.trip)S.trip={depart:null,date:addDays(today(),1),hStart:'08:30',hEnd:'18:30',visitMin:30,noSunday:true,cities:null,excluded:[],added:[],plan:null};
+  const t=S.trip;if(t.tol==null)t.tol=60;if(!t.depart){if(S.settings.depart)t.depart={...S.settings.depart,label:'Point de départ enregistré'};else if(myPos)t.depart={lat:myPos.lat,lng:myPos.lng,label:'Ma position'}}return t}
+function setTripDepart(lat,lng,label){const t=tripInit();t.depart={lat:+lat,lng:+lng,label};staleTrip();save()}
+function staleTrip(){if(S.trip&&S.trip.plan)S.trip.plan.stale=true}
+function cityList(){const m=new Map();for(const c of S.clients){if(!hasPos(c))continue;const k=cityKey(c);if(!m.has(k))m.set(k,{k,name:c.ville||'Sans ville',n:0,lat:0,lng:0});const o=m.get(k);o.n++;o.lat+=+c.lat;o.lng+=+c.lng}
+  return[...m.values()].map(o=>({...o,lat:o.lat/o.n,lng:o.lng/o.n})).sort((a,b)=>a.name.localeCompare(b.name,'fr'))}
+function tripClients(){const t=tripInit(),cs=new Set(t.cities||[]),ex=new Set(t.excluded),ad=new Set(t.added);
+  return S.clients.filter(c=>hasPos(c)&&((cs.has(cityKey(c))&&!ex.has(c.id))||ad.has(c.id)))}
+function nextWorkDay(d,noSun){let x=addDays(d,1);if(noSun&&new Date(x+'T12:00').getDay()===0)x=addDays(x,1);return x}
+function firstDay(d,noSun){return noSun&&new Date(d+'T12:00').getDay()===0?addDays(d,1):d}
+
+/* matrice des temps de route : OSRM, sinon estimation */
+async function travelMatrix(pts){const n=pts.length;
+  const est=()=>{const dur=[],dist=[];for(let i=0;i<n;i++){dur[i]=[];dist[i]=[];for(let j=0;j<n;j++){const d=i===j?0:hav(pts[i],pts[j])*1.3;dist[i][j]=d;dur[i][j]=d/(d<15?28:70)*60}}return{dur,dist,est:true}};
+  if(n>100)return est();
+  try{
+    const js=await osrm('table',pts.map(p=>(+p.lng).toFixed(6)+','+(+p.lat).toFixed(6)).join(';'),'annotations=duration,distance',25000);const E=est();
+    const dur=js.durations.map((row,i)=>row.map((v,j)=>v==null?E.dur[i][j]:v/60)),dist=js.distances.map((row,i)=>row.map((v,j)=>v==null?E.dist[i][j]:v/1000));
+    return{dur,dist,est:false}}catch(e){return est()}}
+
+/* circuit fermé optimal (plus proche voisin + 2-opt + déplacement de points) sur temps de route */
+function closedTour(M){const n=M.dur.length;if(n<=2)return[...Array(n).keys()].slice(1);
+  const c=(i,j)=>(M.dur[i][j]+M.dur[j][i])/2;
+  const used=new Array(n).fill(false),p=[0];used[0]=true;
+  for(let k=1;k<n;k++){const l=p[p.length-1];let b=-1,bd=Infinity;for(let j=1;j<n;j++)if(!used[j]&&c(l,j)<bd){bd=c(l,j);b=j}p.push(b);used[b]=true}
+  p.push(0);let imp=true,g=0;
+  while(imp&&g++<300){imp=false;
+    for(let i=1;i<p.length-2;i++)for(let k=i+1;k<p.length-1;k++){const d=c(p[i-1],p[k])+c(p[i],p[k+1])-c(p[i-1],p[i])-c(p[k],p[k+1]);if(d<-1e-6){p.splice(i,k-i+1,...p.slice(i,k+1).reverse());imp=true}}
+    for(let i=1;i<p.length-1;i++){const x=p[i],rem=c(p[i-1],x)+c(x,p[i+1])-c(p[i-1],p[i+1]);let best=0,bj=-1;
+      for(let j=0;j<p.length-1;j++){if(j===i-1||j===i)continue;const add=c(p[j],x)+c(x,p[j+1])-c(p[j],p[j+1]);if(add-rem<best-1e-6){best=add-rem;bj=j}}
+      if(bj>=0){p.splice(i,1);const at=bj<i?bj+1:bj;p.splice(at,0,x);imp=true}}}
+  return p.slice(1,-1)}
+
+/* découpage en journées selon les horaires */
+/* regroupe les clients d'une même ville à la suite (ordre des villes = 1re apparition dans le circuit) */
+function groupByCity(order,city,M){const seen=[],g={};for(const k of order){const c=city[k];if(!g[c]){g[c]=[];seen.push(c)}g[c].push(k)}
+  const out=[];let pos=0;
+  for(const c of seen){const left=[...g[c]];while(left.length){let b=0;for(let j=1;j<left.length;j++)if(M.dur[pos][left[j]]<M.dur[pos][left[b]])b=j;pos=left.splice(b,1)[0];out.push(pos)}}
+  return out}
+/* découpage en journées : une ville n'est jamais coupée sur deux jours si elle tient dans une journée */
+function splitDays(order,M,t,city){const S0=toMin(t.hStart),E0=toMin(t.hEnd),V=+t.visitMin||30,TOL=Math.max(0,+t.tol||0);
+  const days=[];let date=firstDay(t.date,t.noSunday),pos=0,clock=S0,cur={date,from:0,stops:[],km:0,drive:0};
+  const blocks=[];for(const k of order){const b=blocks[blocks.length-1];if(b&&city[b[0]]===city[k])b.push(k);else blocks.push([k])}
+  const endOf=(blk,from,start)=>{let p=from,c=start;for(const k of blk){c+=M.dur[p][k]+V;p=k}return c};
+  const newDay=()=>{cur.night=pos;days.push(cur);date=nextWorkDay(date,t.noSunday);cur={date,from:pos,stops:[],km:0,drive:0};clock=S0};
+  const visit=k=>{const dr=M.dur[pos][k],arr=clock+dr;cur.stops.push({i:k,arr,drive:dr,km:M.dist[pos][k]});cur.km+=M.dist[pos][k];cur.drive+=dr;clock=arr+V;pos=k;if(clock>E0)cur.over=true};
+  for(const blk of blocks){
+    if(cur.stops.length&&endOf(blk,pos,clock)>E0+TOL&&endOf(blk,pos,S0)<=E0+TOL)newDay();
+    if(endOf(blk,pos,clock)<=E0+TOL){for(const k of blk)visit(k);continue}
+    for(const k of blk){if(cur.stops.length&&clock+M.dur[pos][k]+V>E0)newDay();visit(k)}}
+  const back=M.dur[pos][0];cur.ret={drive:back,km:M.dist[pos][0],arr:clock+back,late:clock+back>E0};cur.km+=M.dist[pos][0];cur.drive+=back;days.push(cur);
+  return days}
+
+async function computeTrip(){const t=tripInit();
+  if(!t.depart){toast('Définis d’abord le point de départ et de retour.');return}
+  const cl=tripClients();if(!cl.length){toast('Aucun client sélectionné : coche au moins une ville.');return}
+  if(toMin(t.hEnd)-toMin(t.hStart)<60){toast('Vérifie les horaires : la journée doit durer au moins 1 heure.');return}
+  tripBusy=true;renderTrip();
+  const pts=[{lat:t.depart.lat,lng:t.depart.lng},...cl.map(c=>({lat:+c.lat,lng:+c.lng}))];
+  const M=await travelMatrix(pts);const raw=closedTour(M);const city=[' depart',...cl.map(cityKey)];
+  const A1=splitDays(groupByCity(raw,city,M),M,t,city),A2=splitDays(groupByCity([...raw].reverse(),city,M),M,t,city);
+  const score=d=>d.length*10000+d.reduce((s,x)=>s+x.drive,0);const days=score(A2)<score(A1)?A2:A1;
+  const ids=[null,...cl.map(c=>c.id)];
+  t.plan={est:M.est,stale:false,at:new Date().toISOString(),days:days.map(d=>({date:d.date,from:d.from===0?null:ids[d.from],night:d.night!=null?ids[d.night]:null,km:+d.km.toFixed(1),drive:Math.round(d.drive),over:!!d.over,
+    stops:d.stops.map(s=>({id:ids[s.i],arr:Math.round(s.arr),drive:Math.round(s.drive),km:+s.km.toFixed(1)})),ret:d.ret?{drive:Math.round(d.ret.drive),km:+d.ret.km.toFixed(1),arr:Math.round(d.ret.arr),late:d.ret.late}:null}))};
+  save();tripBusy=false;tripGeom={};renderTrip();drawTrip();fetchTripGeom();
+  toast(`Itinéraire calculé : ${t.plan.days.length} jour(s), ${cl.length} visite(s)`+(M.est?' (temps estimés, serveur de routage indisponible)':''),4500)}
+
+function dayPoints(d){const t=S.trip,dep={lat:t.depart.lat,lng:t.depart.lng};const st=d.from?byId(d.from):null;
+  const pts=[st&&hasPos(st)?{lat:+st.lat,lng:+st.lng}:dep,...d.stops.map(s=>byId(s.id)).filter(hasPos).map(c=>({lat:+c.lat,lng:+c.lng}))];if(d.ret)pts.push(dep);return pts}
+async function fetchTripGeom(){const p=S.trip&&S.trip.plan;if(!p)return;
+  await Promise.all(p.days.map(async(d,i)=>{try{const pts=dayPoints(d);if(pts.length<2)return;const js=await osrm('route',pts.map(q=>q.lng.toFixed(6)+','+q.lat.toFixed(6)).join(';'),'overview=simplified&geometries=geojson');if(js.code==='Ok')tripGeom[i]=js.routes[0].geometry.coordinates.map(c=>[c[1],c[0]])}catch(e){}}));drawTrip()}
+let tripShown=false;
+function drawTrip(){tripLayer.clearLayers();$('#tripHide').hidden=!tripShown;const p=S.trip&&S.trip.plan;if(!p||!tripShown)return;const all=[];
+  p.days.forEach((d,i)=>{const col=DAYCOL[i%DAYCOL.length];const pts=dayPoints(d);
+    L.polyline(tripGeom[i]||pts.map(q=>[q.lat,q.lng]),{color:col,weight:tripGeom[i]?5:3,opacity:.85,dashArray:tripGeom[i]?null:'6 8'}).addTo(tripLayer);
+    d.stops.forEach((s,k)=>{const c=byId(s.id);if(!hasPos(c))return;all.push([c.lat,c.lng]);
+      L.marker([c.lat,c.lng],{icon:L.divIcon({className:'',html:`<div class="pin" style="--c:${col};font-size:11px">${i+1}.${k+1}</div>`,iconSize:[28,28],iconAnchor:[14,14]}),zIndexOffset:800}).bindPopup(()=>`<div class="pop-t">${esc(c.nom)}</div><div class="pop-s">Jour ${i+1} · ${esc(fmtD(d.date))} · arrivée ${fmtH(s.arr)}<br>${esc(c.ville||'')}</div><div class="pop-a"><button class="btn sm" data-act="detail" data-id="${c.id}">Fiche</button></div>`).addTo(tripLayer)})});
+  const dep=S.trip.depart;L.circleMarker([dep.lat,dep.lng],{radius:9,color:'#fff',weight:3,fillColor:'#14201C',fillOpacity:1}).bindPopup('<div class="pop-t">Départ et retour</div>').addTo(tripLayer);all.push([dep.lat,dep.lng]);
+  return all}
+
+/* liens Google Maps : sur téléphone, 3 étapes intermédiaires maximum par lien -> parties de 4 arrêts */
+function dayLinks(d){const t=S.trip,dep=t.depart;const st=d.from?byId(d.from):null;
+  const origin=st&&hasPos(st)?{lat:+st.lat,lng:+st.lng}:{lat:dep.lat,lng:dep.lng};
+  const seq=d.stops.map(s=>byId(s.id)).filter(hasPos).map(c=>({lat:+c.lat,lng:+c.lng}));if(d.ret)seq.push({lat:dep.lat,lng:dep.lng});
+  const links=[];let o=origin,i=0;while(i<seq.length){const part=seq.slice(i,i+4);const dest=part[part.length-1],wp=part.slice(0,-1);
+    links.push(`https://www.google.com/maps/dir/?api=1&origin=${o.lat},${o.lng}&destination=${dest.lat},${dest.lng}&travelmode=driving`+(wp.length?'&waypoints='+wp.map(q=>q.lat+','+q.lng).join('%7C'):''));o=dest;i+=4}
+  return links}
+
+function renderTrip(){const t=tripInit();const cities=cityList();
+  if(t.cities===null)t.cities=[];
+  const sel=new Set(t.cities),cl=tripClients(),ex=S.clients.filter(c=>t.excluded.includes(c.id)&&sel.has(cityKey(c)));
+  const dep=t.depart,p=t.plan;
+  let h=`<div class="btns" style="align-items:center;flex-wrap:nowrap"><button class="btn sm" style="flex:none" data-act="tripBack">‹ Journée</button><div class="sec-h" style="margin:0">Déplacement<small>aller-retour, plusieurs jours</small></div></div>
+  <div class="card"><h3>Départ et retour</h3>
+    <div class="small" style="margin-bottom:8px">${dep?`<b>${esc(dep.label||'Point défini')}</b> <span class="num muted">${dep.lat.toFixed(4)}, ${dep.lng.toFixed(4)}</span>`:'<span class="warn">Non défini</span>'}</div>
+    <div class="btns"><button class="btn sm" data-act="tdHere">Ma position</button>${S.settings.depart?'<button class="btn sm" data-act="tdSaved">Point enregistré</button>':''}<button class="btn sm" data-act="tdPlace">Sur la carte</button></div>
+    <input class="search" id="tdLoc" placeholder="…ou coller un lien Maps / des coordonnées" style="margin-top:8px">
+    <div class="form"><div class="two"><label class="field"><span>Date de départ</span><input type="date" id="tDate" value="${t.date}"></label><label class="field"><span>Durée par visite (min)</span><input type="number" id="tVisit" min="5" max="240" value="${t.visitMin}"></label></div>
+    <div class="two"><label class="field"><span>Début de journée</span><input type="time" id="tStart" value="${t.hStart}"></label><label class="field"><span>Fin de journée</span><input type="time" id="tEnd" value="${t.hEnd}"></label></div>
+    <label class="field"><span>Dépassement accepté pour finir une ville (min)</span><input type="number" id="tTol" min="0" max="240" step="15" value="${t.tol??60}"></label>
+    <label class="check"><input type="checkbox" id="tSun" ${t.noSunday?'checked':''}> Pas de visites le dimanche</label></div></div>
+  <div class="card"><h3>Villes · ${sel.size} cochée(s)</h3>${cities.length?`<div class="chipwrap">${cities.map(c=>`<button class="chip city" data-act="tCity" data-k="${esc(c.k)}" aria-pressed="${sel.has(c.k)}">${esc(c.name)}<span class="num">${c.n}</span></button>`).join('')}</div><div class="btns" style="margin-top:10px"><button class="btn sm ghost" data-act="tCityAll">Tout cocher</button><button class="btn sm ghost" data-act="tCityNone">Tout décocher</button></div>`:'<p class="small muted">Aucun client localisé. Ajoute ou importe tes clients avec leur position.</p>'}
+    <p class="small muted" style="margin:8px 0 0">Seuls les clients avec une position sont listés. Les villes viennent du champ « Ville » de chaque fiche.</p></div>
+  <div class="card"><h3>Clients à visiter · ${cl.length}</h3>${cl.length?`<div class="mini">${cl.sort((a,b)=>(a.ville||'').localeCompare(b.ville||'','fr')||a.nom.localeCompare(b.nom,'fr')).map(c=>{const s=status(c);return`<div><span><i class="dot" style="--c:${stColor(s)};display:inline-block;margin-right:6px"></i><b style="font-weight:600">${esc(c.nom)}</b> <span class="small muted">${esc(c.ville||'')}</span></span><button class="btn sm icon" data-act="tEx" data-id="${c.id}" aria-label="Retirer ${esc(c.nom)}">✕</button></div>`}).join('')}</div>`:'<p class="small muted">Coche une ou plusieurs villes.</p>'}
+    ${ex.length?`<p class="small muted" style="margin:10px 0 4px">Retirés (${ex.length}) :</p><div class="chipwrap">${ex.map(c=>`<button class="chip" data-act="tIn" data-id="${c.id}">↺ ${esc(c.nom)}</button>`).join('')}</div>`:''}
+    <div class="btns" style="margin-top:10px"><button class="btn sm" data-act="tAddPick">+ Ajouter un client d’une autre ville</button></div></div>
+  <button class="btn pri block" data-act="tCompute" ${tripBusy||!cl.length||!dep?'disabled':''}>${tripBusy?'Calcul en cours…':p?'Recalculer l’itinéraire':'Calculer l’itinéraire'}</button>`;
+  if(p){const tk=p.days.reduce((s,d)=>s+d.km,0),td=p.days.reduce((s,d)=>s+d.drive,0),nv=p.days.reduce((s,d)=>s+d.stops.length,0);
+    if(p.stale)h+=`<div class="banner"><span>Paramètres ou sélection modifiés depuis le calcul.</span><button class="btn sm" data-act="tCompute">Recalculer</button></div>`;
+    h+=`<div class="kpis"><div class="kpi"><div class="v">${p.days.length}</div><div class="l">Jours</div></div><div class="kpi"><div class="v">${nv}</div><div class="l">Visites</div></div><div class="kpi"><div class="v">${Math.round(tk)}</div><div class="l">Km total</div></div><div class="kpi"><div class="v">${fmtDur(td)}</div><div class="l">De route</div></div></div>
+    ${p.est?'<p class="small warn" style="margin:0">Aucun des 2 serveurs de routage n’a répondu : temps et distances estimés (vol d’oiseau × 1,3). Cause la plus fréquente : appli ouverte depuis un aperçu de fichier (WhatsApp, Drive, Claude) au lieu de son lien https, ou connexion faible. Ouvre ton lien https puis touche « Recalculer ».</p>':'<p class="small muted" style="margin:0">Temps de route calculés sur le réseau routier (OpenStreetMap), hors trafic et péages.</p>'}
+    <div class="btns"><button class="btn" data-act="tMap">Voir sur la carte</button><button class="btn pri" data-act="tSend">Envoyer dans Journée</button></div>`;
+    p.days.forEach((d,i)=>{const col=DAYCOL[i%DAYCOL.length],from=d.from?byId(d.from):null,links=dayLinks(d),night=d.night?byId(d.night):null;
+      h+=`<div class="day" style="--dc:${col}"><div class="day-h"><b>Jour ${i+1}</b><span>${esc(fmtDL(d.date))}</span><span class="meta num">${d.km} km · ${fmtDur(d.drive)} de route</span>${d.over?'<span class="small warn" style="flex-basis:100%">Fin de journée dépassée pour terminer la ville</span>':''}</div>
+      <div class="leg start"><span class="h">${t.hStart}</span><span>Départ ${from?'de '+esc(from.ville||from.nom)+' (nuit précédente)':'de '+esc(dep.label||'ton point de départ')}</span><span></span></div>
+      ${d.stops.map((s,k)=>{const c=byId(s.id)||{nom:'(client supprimé)'};return`<div class="leg"><span class="h">${fmtH(s.arr)}</span><div style="min-width:0"><div class="nm">${k+1}. ${esc(c.nom)}</div><div class="small muted">${esc([c.activite,c.ville].filter(Boolean).join(' · '))}${c.id?` · <a href="${gmDir(c)}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">Y aller</a>`:''}</div></div><span class="d">${fmtDur(s.drive)}<br>${s.km} km</span></div>`}).join('')}
+      ${d.ret?`<div class="leg end"><span class="h">${fmtH(d.ret.arr)}</span><span>Retour ${esc(dep.label||'au point de départ')}${d.ret.late?' <span class="warn">· après ta fin de journée</span>':''}</span><span class="d">${fmtDur(d.ret.drive)}<br>${d.ret.km} km</span></div>`:night?`<div class="leg end"><span class="h">Nuit</span><span>Près de ${esc(night.nom)}${night.ville?', '+esc(night.ville):''}</span><span></span></div>`:''}
+      <div class="day-f">${links.map((u,j)=>`<a class="btn sm pri" href="${u}" target="_blank" rel="noopener">Naviguer${links.length>1?' partie '+(j+1)+'/'+links.length:''}</a>`).join('')}${night?`<a class="btn sm" href="https://www.google.com/maps/search/h%C3%B4tel/@${night.lat},${night.lng},14z" target="_blank" rel="noopener">Hôtels autour</a>`:''}</div></div>`})}
+  $('#tripBody').innerHTML=h;
+  const upd=(k,v)=>{t[k]=v;staleTrip();save()};
+  $('#tDate').onchange=e=>{if(e.target.value){upd('date',e.target.value);renderTrip()}};
+  $('#tVisit').onchange=e=>{upd('visitMin',Math.max(5,+e.target.value||30));renderTrip()};
+  $('#tStart').onchange=e=>{if(e.target.value){upd('hStart',e.target.value);renderTrip()}};
+  $('#tEnd').onchange=e=>{if(e.target.value){upd('hEnd',e.target.value);renderTrip()}};
+  $('#tSun').onchange=e=>{upd('noSunday',e.target.checked);renderTrip()};
+  $('#tTol').onchange=e=>{upd('tol',Math.max(0,+e.target.value||0));renderTrip()};
+  $('#tdLoc').oninput=e=>{const r=parseLoc(e.target.value);if(r&&r.lat!=null){setTripDepart(r.lat,r.lng,'Point collé');renderTrip()}else if(r&&r.short)toast('Lien court sans coordonnées : ouvre-le dans Maps et copie les coordonnées.',4500)}}
+
+function openTripPicker(){const t=tripInit(),inT=new Set(tripClients().map(c=>c.id));const list=S.clients.filter(c=>hasPos(c)&&!inT.has(c.id)).sort((a,b)=>(a.ville||'').localeCompare(b.ville||'','fr')||a.nom.localeCompare(b.nom,'fr'));
+  if(!list.length){toast('Tous tes clients localisés sont déjà dans le déplacement.');return}
+  openSheet(`<h2>Ajouter au déplacement</h2><input class="search" id="tpQ" type="search" placeholder="Filtrer par nom ou ville…" style="margin:10px 0"><div class="pick" id="tpList">${list.map(c=>`<label data-n="${esc(norm(c.nom+' '+c.ville))}"><input type="checkbox" value="${c.id}"><i class="dot" style="--c:${stColor(status(c))}"></i><span><b style="font-weight:600">${esc(c.nom)}</b><br><span class="small muted">${esc(c.ville||'Sans ville')}</span></span></label>`).join('')}</div><div class="btns" style="margin-top:12px"><button class="btn ghost" data-act="closeSheet">Annuler</button><button class="btn pri" data-act="tpAdd">Ajouter</button></div>`);
+  $('#tpQ').addEventListener('input',e=>{const q=norm(e.target.value);for(const l of $$('#tpList label'))l.hidden=q&&!l.dataset.n.includes(q)})}
+function sendTrip(){const p=S.trip.plan;const clash=p.days.filter(d=>S.tournees[d.date]&&S.tournees[d.date].ids.length);
+  const go=()=>{for(const d of p.days)S.tournees[d.date]={ids:d.stops.map(s=>s.id),km:d.km,min:d.drive,est:p.est,fromStart:true,trip:true};save();dayDate=p.days[0].date;toast(p.days.length+' journée(s) ajoutée(s) au planning');show('jour')};
+  if(clash.length)askConfirm('Remplacer des journées ?',clash.length+' journée(s) du déplacement ont déjà une tournée ('+clash.map(d=>fmtD(d.date)).join(', ')+'). Elles seront remplacées.','Remplacer',go,false);else go()}
+
+const TA={
+  tripOpen:()=>{tripInit();show('trip')},tripBack:()=>show('jour'),
+  tdHere:()=>locate(p=>{if(p&&!p.manual){setTripDepart(p.lat,p.lng,'Ma position');renderTrip()}else toast('GPS indisponible : place le point sur la carte ou colle un lien.')},true),
+  tdSaved:()=>{setTripDepart(S.settings.depart.lat,S.settings.depart.lng,'Point de départ enregistré');renderTrip()},
+  tdPlace:()=>startPlacing({type:'tripDepart'},'Touche ton point de départ et de retour'),
+  tCity:d=>{const t=tripInit();const i=t.cities.indexOf(d.k);if(i>=0)t.cities.splice(i,1);else t.cities.push(d.k);staleTrip();save();renderTrip()},
+  tCityAll:()=>{const t=tripInit();t.cities=cityList().map(c=>c.k);staleTrip();save();renderTrip()},
+  tCityNone:()=>{const t=tripInit();t.cities=[];staleTrip();save();renderTrip()},
+  tEx:d=>{const t=tripInit();t.added=t.added.filter(x=>x!==d.id);if(!t.excluded.includes(d.id))t.excluded.push(d.id);staleTrip();save();renderTrip()},
+  tIn:d=>{const t=tripInit();t.excluded=t.excluded.filter(x=>x!==d.id);staleTrip();save();renderTrip()},
+  tAddPick:openTripPicker,
+  tpAdd:()=>{const t=tripInit();const ids=$$('#tpList input:checked').map(i=>i.value);if(!ids.length){toast('Sélectionne au moins un client.');return}for(const id of ids){t.excluded=t.excluded.filter(x=>x!==id);if(!t.added.includes(id))t.added.push(id)}staleTrip();save();closeSheet();renderTrip()},
+  tCompute:computeTrip,
+  tMap:()=>{tripShown=true;show('carte');const pts=drawTrip();if(pts&&pts.length)map.fitBounds(pts,{padding:[40,40]});toast('Parcours affiché. Les numéros indiquent jour.ordre.',3500)},
+  tSend:sendTrip,
+  tHide:()=>{tripShown=false;drawTrip()}
+};
+
+/* ---------- actions ---------- */
+const A={
+  closeSheet:closeSheet,confirmOk:()=>{const f=confirmFn;confirmFn=null;closeSheet();f&&f()},
+  locate:()=>locate(p=>{if(p){map.setView([p.lat,p.lng],15);if(cur!=='carte')toast('Position mise à jour')}else startPlacing({type:'me'},'Touche la carte pour placer ta position')}),
+  cancelPlace:()=>{const p=placing;placing=null;$('#placeBanner').hidden=true;if(p&&p.type==='client')openClientForm(p.draft,p.back);if(p&&p.type==='tripDepart')show('trip')},
+  toggleLegend:()=>{$('#legend').hidden=!$('#legend').hidden},
+  chrSearch:chrSearch,chrClear:()=>{chrLayer.clearLayers();$('#chrClear').hidden=true},
+  chrAdd:d=>{const o=chrData[d.id];if(!o)return;map.closePopup();openClientForm({nom:o.nom,activite:o.act,tel:o.tel,adresse:o.adr,ville:o.ville,lat:+o.lat.toFixed(6),lng:+o.lng.toFixed(6),prospect:true,_src:'Position OpenStreetMap'})},
+  detail:d=>{map.closePopup();openDetail(d.id)},visit:d=>{map.closePopup();openVisitForm(d.id)},
+  newClient:()=>openClientForm({}),editClient:d=>openClientForm({...byId(d.id)}),
+  showOnMap:d=>{const c=byId(d.id);closeSheet();show('carte');map.setView([c.lat,c.lng],17)},
+  cfHere:()=>{setLocStat('Recherche de ta position…');locate(p=>{if(p&&!p.manual){$('#cfLat').value=+p.lat.toFixed(6);$('#cfLng').value=+p.lng.toFixed(6);setLocStat(`✓ Position GPS (±${Math.round(p.acc)} m)`,'ok')}else setLocStat('GPS indisponible ici. Utilise « Sur la carte » ou colle un lien.','warn')},true)},
+  cfPlace:()=>{const f=readClientForm();startPlacing({type:'client',draft:f},'Touche l’emplacement exact du client')},
+  cfSave:saveClient,
+  delClient:()=>{const id=$('#sheet').dataset.cid,c=byId(id);askConfirm('Supprimer '+c.nom+' ?','Ses '+((IDX.by[id]||[]).length)+' visite(s) seront aussi supprimées.','Supprimer',()=>{S.clients=S.clients.filter(x=>x.id!==id);S.visites=S.visites.filter(v=>v.clientId!==id);for(const t of Object.values(S.tournees))t.ids=t.ids.filter(x=>x!==id);save();toast('Client supprimé');renderAll()})},
+  vfRes:(d,b)=>{for(const x of $$('.results button'))x.setAttribute('aria-pressed',x===b?'true':'false');$('#sheet').dataset.res=d.k;if(d.k==='relancer'&&!$('#vfRel').value)$('#vfRel').value=addDays($('#vfDate').value||today(),7)},
+  vfPlus:d=>{$('#vfRel').value=+d.n?addDays($('#vfDate').value||today(),+d.n):''},
+  vfSave:saveVisit,
+  delVisit:d=>{const v=S.visites.find(x=>x.id===d.id);askConfirm('Supprimer cette visite ?',fmtD(v.dt.slice(0,10))+' · '+resLabel(v.res),'Supprimer',()=>{S.visites=S.visites.filter(x=>x.id!==d.id);save();renderAll();openDetail(v.clientId)})},
+  dayPrev:()=>{dayDate=addDays(dayDate,-1);renderAll()},dayNext:()=>{dayDate=addDays(dayDate,1);renderAll()},dayToday:()=>{dayDate=today();renderAll()},
+  pickOpen:openPicker,pkAdd:()=>{const ids=$$('#pkList input:checked').map(i=>i.value);if(!ids.length){toast('Sélectionne au moins un client.');return}addStops(ids);closeSheet();toast(ids.length+' client(s) ajouté(s)');renderAll()},
+  addStop:d=>{addStops([d.id]);if(!$('#sheetWrap').hidden)closeSheet();toast('Ajouté au '+fmtD(dayDate));renderAll()},
+  addAllSugg:()=>{const t=tour(dayDate);const ids=S.clients.filter(c=>!t.ids.includes(c.id)&&['late','due'].includes(status(c,dayDate))).map(c=>c.id);addStops(ids);toast(ids.length+' client(s) ajouté(s)');renderAll()},
+  planToday:d=>{dayDate=today();addStops([d.id],dayDate);toast('Ajouté à la journée d’aujourd’hui');renderAll()},
+  unstop:d=>{const t=tour(dayDate);t.ids=t.ids.filter(x=>x!==d.id);t.km=null;t.min=null;delete routeGeom[dayDate];if(!t.ids.length)delete S.tournees[dayDate];save();renderAll()},
+  up:d=>move(+d.i,-1),down:d=>move(+d.i,1),optimize:optimize,
+  cliFilter:d=>{cliFilter=d.f;renderClients()},period:d=>{statsPeriod=d.p;renderStats()},
+  exportXlsx:exportXlsx,exportPdf:exportPdf,template:templateXlsx,
+  importPick:()=>{$('#fileImport').value='';$('#fileImport').click()},imGo:doImport,
+  backup:()=>{downloadText('RoutePro-sauvegarde-'+stamp()+'.json',JSON.stringify(S),'application/json');toast('Sauvegarde téléchargée')},
+  restorePick:()=>{$('#fileRestore').value='';$('#fileRestore').click()},
+  departHere:()=>locate(p=>{if(p&&!p.manual){S.settings.depart={lat:p.lat,lng:p.lng};save();renderPlus();toast('Point de départ enregistré')}else toast('GPS indisponible : place le point sur la carte.')},true),
+  departPlace:()=>startPlacing({type:'depart'},'Touche ton point de départ (domicile, dépôt…)'),
+  departClear:()=>{S.settings.depart=null;save();renderPlus()},
+  geocode:geocodeAll,clearDemo:()=>askConfirm('Effacer les exemples ?','Les clients, visites et tournées fictifs seront supprimés. Tes propres données restent.','Effacer',clearDemo),
+  clearAll:()=>askConfirm('Tout effacer ?','Clients, visites et tournées seront supprimés de ce téléphone. Fais une sauvegarde avant si besoin.','Tout effacer',()=>{S=blank();S.seeded=true;save();for(const k in routeGeom)delete routeGeom[k];toast('Données effacées');renderAll()})
+};
+Object.assign(A,TA);
+function move(i,dir){const t=tour(dayDate),j=i+dir;if(j<0||j>=t.ids.length)return;[t.ids[i],t.ids[j]]=[t.ids[j],t.ids[i]];t.km=null;t.min=null;delete routeGeom[dayDate];save();renderAll()}
+function onAct(e){const tb=e.target.closest('[data-tab]');if(tb){show(tb.dataset.tab);return}const b=e.target.closest('[data-act]');if(!b||b.disabled)return;const f=A[b.dataset.act];if(f){e.preventDefault();f(b.dataset,b,e)}}
+document.addEventListener('click',onAct);
+/* Leaflet bloque la propagation des clics dans les popups : on écoute directement le popup ouvert */
+map.on('popupopen',e=>{const el=e.popup.getElement();if(el&&!el._act){el._act=true;el.addEventListener('click',onAct)}});
+$('#fileImport').addEventListener('change',e=>{const f=e.target.files[0];if(f)readImport(f)});
+$('#fileRestore').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!Array.isArray(d.clients)||!Array.isArray(d.visites))throw 0;
+  askConfirm('Restaurer cette sauvegarde ?',`${d.clients.length} client(s) et ${d.visites.length} visite(s). Les données actuelles de ce téléphone seront remplacées.`,'Restaurer',()=>{S=Object.assign(blank(),d);S.settings=Object.assign(blank().settings,d.settings||{});save();fitted=false;toast('Sauvegarde restaurée');renderAll()},false)}catch(err){toast('Ce fichier n’est pas une sauvegarde RoutePro valide.')}};r.readAsText(f)});
+
+/* ---------- code d'accès ---------- */
+const LOCK={salt:'696f135d44779e1a28b0b9741c12e1e3',hash:'c7a3dedb141eb3c93c99f7fac4da2dea14c7361431a841c443e5de6807d8f382',iter:150000};
+async function lockHash(code){const enc=new TextEncoder();const salt=new Uint8Array(LOCK.salt.match(/../g).map(h=>parseInt(h,16)));
+  const k=await crypto.subtle.importKey('raw',enc.encode(code),'PBKDF2',false,['deriveBits']);
+  const b=await crypto.subtle.deriveBits({name:'PBKDF2',salt,iterations:LOCK.iter,hash:'SHA-256'},k,256);return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+(function(){let ok=null;try{ok=localStorage.getItem('routepro_lock')}catch(e){}
+  if(ok===LOCK.hash){$('#lock').remove();return}
+  $('#lockForm').addEventListener('submit',async e=>{e.preventDefault();const err=$('#lockErr');
+    if(!(window.crypto&&crypto.subtle)){err.textContent="Ouvre l'appli depuis son lien https pour saisir le code.";return}
+    err.textContent='Vérification…';const h=await lockHash($('#lockIn').value.trim());
+    if(h===LOCK.hash){try{localStorage.setItem('routepro_lock',h)}catch(x){}$('#lock').remove();setTimeout(()=>map.invalidateSize(),50)}
+    else{err.textContent='Code incorrect.';$('#lockIn').value='';$('#lockIn').focus()}})})();
+
+/* ---------- démarrage ---------- */
+if(!S.seeded&&!S.clients.length)seed();
+buildIndex();show('carte');
+locate(null,true);
+</script>
+</body>
+</html>
