@@ -877,7 +877,9 @@ const A={
   exportXlsx:exportXlsx,exportPdf:exportPdf,template:templateXlsx,
   importPick:()=>{$('#fileImport').value='';$('#fileImport').click()},imGo:doImport,
   backup:()=>{downloadText('RoutePro-sauvegarde-'+stamp()+'.json',JSON.stringify(S),'application/json');toast('Sauvegarde téléchargée')},
-  restorePick:()=>{$('#fileRestore').value='';$('#fileRestore').click()},
+  restorePick:()=>openSheet(`<h2>Restaurer une sauvegarde</h2><p class="small muted">Colle le texte de ta sauvegarde (il commence par {"clients"), ou choisis le fichier .json.</p><div class="form"><label class="field"><span>Texte de la sauvegarde</span><textarea id="rsText" style="min-height:140px;font:12px var(--f-mono)" placeholder='{"clients":[…'></textarea></label><div class="btns"><button class="btn" data-act="rsFile">Choisir un fichier</button><button class="btn pri" data-act="rsPaste">Restaurer le texte collé</button></div></div>`),
+  rsFile:()=>{closeSheet();$('#fileRestore').value='';$('#fileRestore').click()},
+  rsPaste:()=>{const t=$('#rsText').value;if(!t.trim()){toast('Colle d’abord le texte de la sauvegarde.');return}restoreFrom(t)},
   departHere:()=>locate(p=>{if(p&&!p.manual){S.settings.depart={lat:p.lat,lng:p.lng};save();renderPlus();toast('Point de départ enregistré')}else toast('GPS indisponible : place le point sur la carte.')},true),
   departPlace:()=>startPlacing({type:'depart'},'Touche ton point de départ (domicile, dépôt…)'),
   departClear:()=>{S.settings.depart=null;save();renderPlus()},
@@ -891,8 +893,9 @@ document.addEventListener('click',onAct);
 /* Leaflet bloque la propagation des clics dans les popups : on écoute directement le popup ouvert */
 map.on('popupopen',e=>{const el=e.popup.getElement();if(el&&!el._act){el._act=true;el.addEventListener('click',onAct)}});
 $('#fileImport').addEventListener('change',e=>{const f=e.target.files[0];if(f)readImport(f)});
-$('#fileRestore').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!Array.isArray(d.clients)||!Array.isArray(d.visites))throw 0;
-  askConfirm('Restaurer cette sauvegarde ?',`${d.clients.length} client(s) et ${d.visites.length} visite(s). Les données actuelles de ce téléphone seront remplacées.`,'Restaurer',()=>{S=Object.assign(blank(),d);S.settings=Object.assign(blank().settings,d.settings||{});save();fitted=false;toast('Sauvegarde restaurée');renderAll()},false)}catch(err){toast('Ce fichier n’est pas une sauvegarde RoutePro valide.')}};r.readAsText(f)});
+function restoreFrom(text){let d;try{d=JSON.parse(String(text).trim());if(!Array.isArray(d.clients)||!Array.isArray(d.visites))throw 0}catch(err){toast('Ce texte n’est pas une sauvegarde RoutePro valide. Copie bien tout le texte, du premier { au dernier }.',5500);return}
+  askConfirm('Restaurer cette sauvegarde ?',`${d.clients.length} client(s) et ${d.visites.length} visite(s). Les données actuelles de ce téléphone seront remplacées.`,'Restaurer',()=>{S=Object.assign(blank(),d);S.seeded=true;S.settings=Object.assign(blank().settings,d.settings||{});save();fitted=false;toast('Sauvegarde restaurée : '+d.clients.length+' client(s)');show('clients')},false)}
+$('#fileRestore').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>restoreFrom(r.result);r.readAsText(f)});
 
 /* ---------- code d'accès ---------- */
 const LOCK={salt:'696f135d44779e1a28b0b9741c12e1e3',hash:'c7a3dedb141eb3c93c99f7fac4da2dea14c7361431a841c443e5de6807d8f382',iter:150000};
