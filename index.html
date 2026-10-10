@@ -293,7 +293,7 @@ input,select,textarea{font-size:16px!important}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script>
 "use strict";
-const APP_VERSION='2026-10-10b';
+const APP_VERSION='2026-10-10c';
 /* ---------- utilitaires ---------- */
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -908,7 +908,7 @@ const A={
   departHere:()=>locate(p=>{if(p&&!p.manual){S.settings.depart={lat:p.lat,lng:p.lng};save();renderPlus();toast('Point de départ enregistré')}else toast('GPS indisponible : place le point sur la carte.')},true),
   departPlace:()=>startPlacing({type:'depart'},'Touche ton point de départ (domicile, dépôt…)'),
   departClear:()=>{S.settings.depart=null;save();renderPlus()},
-  update:async()=>{toast('Recherche de la dernière version…',6000);try{await fetch(location.pathname,{cache:'reload'});await fetch(location.href,{cache:'reload'})}catch(e){toast('Pas de connexion : réessaie plus tard.');return}location.reload()},
+  update:()=>forceUpdate(),
   geocode:geocodeAll,clearDemo:()=>askConfirm('Effacer les exemples ?','Les clients, visites et tournées fictifs seront supprimés. Tes propres données restent.','Effacer',clearDemo),
   clearAll:()=>askConfirm('Tout effacer ?','Clients, visites et tournées seront supprimés de ce téléphone. Fais une sauvegarde avant si besoin.','Tout effacer',()=>{S=blank();S.seeded=true;save();for(const k in routeGeom)delete routeGeom[k];toast('Données effacées');renderAll()})
 };
@@ -938,6 +938,14 @@ async function lockHash(code){const enc=new TextEncoder();const salt=new Uint8Ar
     err.textContent='Vérification…';const h=await lockHash($('#lockIn').value.trim());
     if(h===LOCK.hash){try{localStorage.setItem('routepro_lock',h)}catch(x){}$('#lock').remove();setTimeout(()=>map.invalidateSize(),50)}
     else{err.textContent='Code incorrect.';$('#lockIn').value='';$('#lockIn').focus()}})})();
+
+/* ---------- détection des mises à jour ---------- */
+async function forceUpdate(){toast('Chargement de la dernière version…',6000);try{await fetch(location.pathname,{cache:'reload'});await fetch(location.href,{cache:'reload'})}catch(e){toast('Pas de connexion : réessaie plus tard.');return}location.reload()}
+async function checkUpdate(){try{const r=await fetch(location.pathname+'?check='+Date.now(),{cache:'no-store'});if(!r.ok)return;const t=await r.text();const m=t.match(/APP_VERSION='([^']+)'/);
+  if(m&&m[1]!==APP_VERSION&&!document.getElementById('updBanner')){const b=document.createElement('div');b.id='updBanner';b.className='banner';b.style.cssText='position:fixed;left:12px;right:12px;top:calc(env(safe-area-inset-top,0px) + 62px);z-index:4000;background:var(--surface);box-shadow:var(--shadow)';
+    b.innerHTML='<span><b>Nouvelle version disponible.</b> Tes données sont conservées.</span><button class="btn sm pri">Mettre à jour</button>';b.querySelector('button').onclick=forceUpdate;document.body.appendChild(b)}}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkUpdate()});
+setTimeout(checkUpdate,3000);
 
 /* ---------- démarrage ---------- */
 if(!S.seeded&&!S.clients.length)seed();
