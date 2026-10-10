@@ -247,10 +247,13 @@ input,select,textarea{font-size:16px!important}
           <option value="all">Tout CHR</option>
         </select>
         <select id="chrRadius" aria-label="Rayon">
+          <option value="auto" selected>Rayon auto</option>
           <option value="500">500 m</option>
-          <option value="1000" selected>1 km</option>
+          <option value="1000">1 km</option>
           <option value="2000">2 km</option>
           <option value="5000">5 km</option>
+          <option value="10000">10 km</option>
+          <option value="30000">30 km</option>
         </select>
         <button class="btn" data-act="chrSearch">Chercher ici</button>
         <button class="btn" data-act="chrList" id="chrListBtn" hidden>Liste</button><button class="btn icon" data-act="chrClear" id="chrClear" hidden aria-label="Effacer les résultats">✕</button>
@@ -293,7 +296,7 @@ input,select,textarea{font-size:16px!important}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script>
 "use strict";
-const APP_VERSION='2026-10-10f';
+const APP_VERSION='2026-10-10g';
 /* ---------- utilitaires ---------- */
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -421,7 +424,7 @@ map.on('click',e=>{if(!placing)return;const {lat,lng}=e.latlng,p=placing;placing
 const CHR={hotel:['nwr["tourism"~"^(hotel|guest_house|hostel|motel)$"]'],restaurant:['nwr["amenity"~"^(restaurant|fast_food)$"]'],cafe:['nwr["amenity"="cafe"]'],bar:['nwr["amenity"~"^(bar|pub)$"]']};
 CHR.all=[...CHR.hotel,...CHR.restaurant,...CHR.cafe,...CHR.bar];
 const CHR_LBL={hotel:'Hôtel',guest_house:"Maison d'hôtes",hostel:'Auberge',motel:'Motel',restaurant:'Restaurant',fast_food:'Snack',cafe:'Café',bar:'Bar',pub:'Bar'};
-let chrData={},chrMk={},chrCenter=null,chrType='restaurant';
+let chrData={},chrMk={},chrCenter=null,chrType='restaurant',chrRadiusUsed=0,chrRef=null;
 const CHR_Q={hotel:'hôtels',restaurant:'restaurants',cafe:'cafés',bar:'bars',all:'restaurants cafés hôtels'};
 const gAvis=o=>`https://www.google.com/maps/search/${encodeURIComponent(o.nom+(o.ville?' '+o.ville:''))}/@${o.lat},${o.lng},18z`;
 /* serveurs OpenStreetMap (Overpass) : le principal est souvent saturé, on essaie les miroirs */
@@ -431,20 +434,23 @@ async function overpass(q){let last;
     const res=await fetch(u,{method:'POST',body:'data='+encodeURIComponent(q),headers:{'Content-Type':'application/x-www-form-urlencoded'},signal:ctl.signal});clearTimeout(tm);
     if(!res.ok){last=res.status;continue}return await res.json()}catch(e){last=e}}
   throw last||new Error('overpass')}
-function chrSearchAt(lat,lng,type,radius){closeSheet();if(cur!=='carte')show('carte');$('#chrType').value=type;$('#chrRadius').value=String(radius||2000);
+function chrSearchAt(lat,lng,type,radius){closeSheet();if(cur!=='carte')show('carte');$('#chrType').value=type;$('#chrRadius').value=String(radius||'auto');
   map.setView([+lat,+lng],14,{animate:false});setTimeout(chrSearch,80)}
 async function chrSearch(){
   if(map.getZoom()<12){if(myPos){map.setView([myPos.lat,myPos.lng],14)}else{toast('Zoome d’abord sur la ville où tu veux chercher, puis touche « Chercher ici ».',4500);return}}
-  const type=$('#chrType').value,r=+$('#chrRadius').value,c=map.getCenter();
-  const q=`[out:json][timeout:25];(${CHR[type].map(s=>`${s}(around:${r},${c.lat.toFixed(5)},${c.lng.toFixed(5)});`).join('')});out center 250;`;
-  toast('Recherche en cours…',8000);
-  try{const js=await overpass(q);chrLayer.clearLayers();chrData={};chrMk={};chrCenter={lat:c.lat,lng:c.lng};let n=0;const pts=[[c.lat,c.lng]];
+  const type=$('#chrType').value,rv=$('#chrRadius').value,c=map.getCenter();
+  /* rayon auto : on élargit (2, 5, 10, 20, 40 km) jusqu'à avoir au moins 15 résultats */
+  const steps=rv==='auto'?[2000,5000,10000,20000,40000]:[+rv];let js,r;
+  try{for(r of steps){toast(`Recherche en cours (${r/1000} km)…`,8000);
+      const q=`[out:json][timeout:25];(${CHR[type].map(s=>`${s}(around:${r},${c.lat.toFixed(5)},${c.lng.toFixed(5)});`).join('')});out center 300;`;
+      js=await overpass(q);if(js.elements.filter(e=>e.tags&&(e.tags.name||e.tags['name:fr']||e.tags['name:ar'])).length>=15)break}
+    chrRadiusUsed=r;chrLayer.clearLayers();chrData={};chrMk={};chrCenter={lat:c.lat,lng:c.lng};chrRef=myPos&&hav(myPos,c)<=30?{lat:myPos.lat,lng:myPos.lng,me:true}:{lat:c.lat,lng:c.lng,me:false};let n=0;const pts=[[c.lat,c.lng]];
     const known=new Set(S.clients.map(c=>norm(c.nom)));
     const col=getComputedStyle(document.documentElement).getPropertyValue('--prospect').trim(),colOk=getComputedStyle(document.documentElement).getPropertyValue('--ok').trim();
     for(const el of js.elements){const lat=el.lat??el.center?.lat,lng=el.lon??el.center?.lon;if(lat==null)continue;const tg=el.tags||{};const nom=tg.name||tg['name:fr']||tg['name:ar'];if(!nom)continue;
       const k=tg.tourism||tg.amenity;const id='o'+el.id;chrData[id]={nom,act:CHR_LBL[k]||k,tel:tg.phone||tg['contact:phone']||'',adr:[tg['addr:street'],tg['addr:city']].filter(Boolean).join(', '),ville:tg['addr:city']||'',lat,lng};
       const isC=known.has(norm(nom));
-      const letter={hotel:'H',guest_house:'H',hostel:'H',motel:'H',restaurant:'R',fast_food:'S',cafe:'C',bar:'B',pub:'B'}[k]||'•';chrData[id].isC=isC;chrData[id].d=hav(c,{lat,lng});pts.push([lat,lng]);
+      const letter={hotel:'H',guest_house:'H',hostel:'H',motel:'H',restaurant:'R',fast_food:'S',cafe:'C',bar:'B',pub:'B'}[k]||'•';chrData[id].isC=isC;chrData[id].d=hav(chrRef,{lat,lng});pts.push([lat,lng]);
       chrMk[id]=L.marker([lat,lng],{icon:L.divIcon({className:'',html:`<div class="chrpin" style="--c:${isC?colOk:col}"><b>${letter}</b></div>`,iconSize:[26,26],iconAnchor:[13,26],popupAnchor:[0,-24]}),zIndexOffset:1000}).bindPopup(`<div class="pop-t">${esc(nom)}</div><div class="pop-s">${esc(chrData[id].act)}${chrData[id].tel?' · '+esc(chrData[id].tel):''}${isC?'<br>Déjà dans tes clients':''}</div><div class="pop-a"><a class="btn sm pri" href="${navTo(lat,lng)}" target="_blank" rel="noopener">Itinéraire</a>${isC?'':`<button class="btn sm" data-act="chrAdd" data-id="${id}">+ Prospect</button>`}</div>`).addTo(chrLayer);n++}
     $('#chrClear').hidden=!n;$('#chrListBtn').hidden=!n;$('#chrListBtn').textContent='Liste ('+n+')';if(n){map.fitBounds(pts,{padding:[60,60],maxZoom:16});chrType=type;setTimeout(()=>A.chrList(),150)}else toast(n?n+' établissement(s) trouvé(s) dans un rayon de '+(r>=1000?r/1000+' km':r+' m'):'Aucun résultat ici. Élargis le rayon ou déplace la carte.')
   }catch(e){toast('Recherche indisponible : les 4 serveurs OpenStreetMap n’ont pas répondu. Vérifie ta connexion et réessaie dans une minute.',5500)}}
@@ -902,8 +908,8 @@ const A={
   cancelPlace:()=>{const p=placing;placing=null;$('#placeBanner').hidden=true;if(p&&p.type==='client')openClientForm(p.draft,p.back);if(p&&p.type==='tripDepart')show('trip')},
   toggleLegend:()=>{$('#legend').hidden=!$('#legend').hidden},
   chrSearch:chrSearch,
-  aroundAt:d=>chrSearchAt(d.lat,d.lng,d.type,2000),chrClear:()=>{chrLayer.clearLayers();$('#chrClear').hidden=true;$('#chrListBtn').hidden=true},
-  chrList:()=>{const L2=Object.entries(chrData).sort((a,b)=>a[1].d-b[1].d);const cc=chrCenter||map.getCenter();openSheet(`<h2>${L2.length} ${esc(CHR_Q[chrType]||'établissements')} trouvé(s)</h2><p class="small muted">Triés du plus proche au plus loin. OpenStreetMap ne contient pas de notes : pour voir les mieux notés et les avis, utilise Google Maps.</p><a class="btn pri block" style="margin-top:10px" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((CHR_Q[chrType]||'restaurants')+' near '+cc.lat.toFixed(5)+','+cc.lng.toFixed(5))}" target="_blank" rel="noopener">★ Les mieux notés autour (Google Maps)</a><div class="hist" style="margin-top:10px">${L2.map(([id,o])=>`<div class="h" style="--c:${o.isC?'var(--ok)':'var(--prospect)'}"><div style="font-weight:600">${esc(o.nom)}</div><div class="small muted">${esc(o.act||'')} · ${o.d<1?Math.round(o.d*1000)+' m':o.d.toFixed(1)+' km'}${o.tel?' · '+esc(o.tel):''}${o.isC?' · déjà client':''}</div><div class="btns" style="margin-top:6px"><button class="btn sm" data-act="chrShow" data-id="${id}">Voir sur la carte</button><a class="btn sm" href="${gAvis(o)}" target="_blank" rel="noopener">★ Avis Google</a><a class="btn sm pri" href="${navTo(o.lat,o.lng)}" target="_blank" rel="noopener">Itinéraire</a>${o.isC?'':`<button class="btn sm" data-act="chrAdd" data-id="${id}">+ Prospect</button>`}</div></div>`).join('')}</div>`)},
+  aroundAt:d=>chrSearchAt(d.lat,d.lng,d.type,'auto'),chrClear:()=>{chrLayer.clearLayers();$('#chrClear').hidden=true;$('#chrListBtn').hidden=true},
+  chrList:()=>{const L2=Object.entries(chrData).sort((a,b)=>a[1].d-b[1].d);const cc=chrCenter||map.getCenter();openSheet(`<h2>${L2.length} ${esc(CHR_Q[chrType]||'établissements')} trouvé(s)</h2><p class="small muted">Du plus proche au plus loin, distances ${chrRef&&chrRef.me?'depuis ta position':(myPos?'depuis le point recherché (tu es à plus de 30 km)':'depuis le point recherché (GPS indisponible)')} à vol d’oiseau. Zone de recherche : ${chrRadiusUsed/1000} km. Pas de notes dans OpenStreetMap : pour les avis, utilise Google Maps.</p><a class="btn pri block" style="margin-top:10px" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((CHR_Q[chrType]||'restaurants')+' near '+cc.lat.toFixed(5)+','+cc.lng.toFixed(5))}" target="_blank" rel="noopener">★ Les mieux notés autour (Google Maps)</a><div class="hist" style="margin-top:10px">${L2.map(([id,o])=>`<div class="h" style="--c:${o.isC?'var(--ok)':'var(--prospect)'}"><div style="font-weight:600">${esc(o.nom)}</div><div class="small muted">${esc(o.act||'')} · ${o.d<1?Math.round(o.d*1000)+' m':o.d.toFixed(1)+' km'}${o.tel?' · '+esc(o.tel):''}${o.isC?' · déjà client':''}</div><div class="btns" style="margin-top:6px"><button class="btn sm" data-act="chrShow" data-id="${id}">Voir sur la carte</button><a class="btn sm" href="${gAvis(o)}" target="_blank" rel="noopener">★ Avis Google</a><a class="btn sm pri" href="${navTo(o.lat,o.lng)}" target="_blank" rel="noopener">Itinéraire</a>${o.isC?'':`<button class="btn sm" data-act="chrAdd" data-id="${id}">+ Prospect</button>`}</div></div>`).join('')}</div>`)},
   chrShow:d=>{closeSheet();const m=chrMk[d.id];if(m){map.setView(m.getLatLng(),17);setTimeout(()=>m.openPopup(),300)}},
   chrAdd:d=>{const o=chrData[d.id];if(!o)return;map.closePopup();closeSheet();openClientForm({nom:o.nom,activite:o.act,tel:o.tel,adresse:o.adr,ville:o.ville,lat:+o.lat.toFixed(6),lng:+o.lng.toFixed(6),prospect:true,_src:'Position OpenStreetMap'})},
   detail:d=>{map.closePopup();openDetail(d.id)},visit:d=>{map.closePopup();openVisitForm(d.id)},
