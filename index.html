@@ -293,7 +293,7 @@ input,select,textarea{font-size:16px!important}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script>
 "use strict";
-const APP_VERSION='2026-10-10c';
+const APP_VERSION='2026-10-10d';
 /* ---------- utilitaires ---------- */
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -421,7 +421,9 @@ map.on('click',e=>{if(!placing)return;const {lat,lng}=e.latlng,p=placing;placing
 const CHR={hotel:['nwr["tourism"~"^(hotel|guest_house|hostel|motel)$"]'],restaurant:['nwr["amenity"~"^(restaurant|fast_food)$"]'],cafe:['nwr["amenity"="cafe"]'],bar:['nwr["amenity"~"^(bar|pub)$"]']};
 CHR.all=[...CHR.hotel,...CHR.restaurant,...CHR.cafe,...CHR.bar];
 const CHR_LBL={hotel:'Hôtel',guest_house:"Maison d'hôtes",hostel:'Auberge',motel:'Motel',restaurant:'Restaurant',fast_food:'Snack',cafe:'Café',bar:'Bar',pub:'Bar'};
-let chrData={},chrMk={},chrCenter=null;
+let chrData={},chrMk={},chrCenter=null,chrType='restaurant';
+const CHR_Q={hotel:'hôtels',restaurant:'restaurants',cafe:'cafés',bar:'bars',all:'restaurants cafés hôtels'};
+const gAvis=o=>`https://www.google.com/maps/search/${encodeURIComponent(o.nom+(o.ville?' '+o.ville:''))}/@${o.lat},${o.lng},18z`;
 /* serveurs OpenStreetMap (Overpass) : le principal est souvent saturé, on essaie les miroirs */
 const OVERPASS=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://overpass.private.coffee/api/interpreter','https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
 async function overpass(q){let last;
@@ -442,7 +444,7 @@ async function chrSearch(){
       const isC=known.has(norm(nom));
       const letter={hotel:'H',guest_house:'H',hostel:'H',motel:'H',restaurant:'R',fast_food:'S',cafe:'C',bar:'B',pub:'B'}[k]||'•';chrData[id].isC=isC;chrData[id].d=hav(c,{lat,lng});pts.push([lat,lng]);
       chrMk[id]=L.marker([lat,lng],{icon:L.divIcon({className:'',html:`<div class="chrpin" style="--c:${isC?colOk:col}"><b>${letter}</b></div>`,iconSize:[26,26],iconAnchor:[13,26],popupAnchor:[0,-24]}),zIndexOffset:1000}).bindPopup(`<div class="pop-t">${esc(nom)}</div><div class="pop-s">${esc(chrData[id].act)}${chrData[id].tel?' · '+esc(chrData[id].tel):''}${isC?'<br>Déjà dans tes clients':''}</div><div class="pop-a"><a class="btn sm pri" href="${navTo(lat,lng)}" target="_blank" rel="noopener">Itinéraire</a>${isC?'':`<button class="btn sm" data-act="chrAdd" data-id="${id}">+ Prospect</button>`}</div>`).addTo(chrLayer);n++}
-    $('#chrClear').hidden=!n;$('#chrListBtn').hidden=!n;$('#chrListBtn').textContent='Liste ('+n+')';if(n)map.fitBounds(pts,{padding:[60,60],maxZoom:16});toast(n?n+' établissement(s) trouvé(s) dans un rayon de '+(r>=1000?r/1000+' km':r+' m'):'Aucun résultat ici. Élargis le rayon ou déplace la carte.')
+    $('#chrClear').hidden=!n;$('#chrListBtn').hidden=!n;$('#chrListBtn').textContent='Liste ('+n+')';if(n){map.fitBounds(pts,{padding:[60,60],maxZoom:16});chrType=type;setTimeout(()=>A.chrList(),150)}else toast(n?n+' établissement(s) trouvé(s) dans un rayon de '+(r>=1000?r/1000+' km':r+' m'):'Aucun résultat ici. Élargis le rayon ou déplace la carte.')
   }catch(e){toast('Recherche indisponible : les 4 serveurs OpenStreetMap n’ont pas répondu. Vérifie ta connexion et réessaie dans une minute.',5500)}}
 
 /* ---------- liens Google Maps ---------- */
@@ -877,7 +879,7 @@ const A={
   cancelPlace:()=>{const p=placing;placing=null;$('#placeBanner').hidden=true;if(p&&p.type==='client')openClientForm(p.draft,p.back);if(p&&p.type==='tripDepart')show('trip')},
   toggleLegend:()=>{$('#legend').hidden=!$('#legend').hidden},
   chrSearch:chrSearch,chrClear:()=>{chrLayer.clearLayers();$('#chrClear').hidden=true;$('#chrListBtn').hidden=true},
-  chrList:()=>{const L2=Object.entries(chrData).sort((a,b)=>a[1].d-b[1].d);openSheet(`<h2>${L2.length} résultat(s)</h2><p class="small muted">Triés par distance du centre de la recherche.</p><div class="hist" style="margin-top:10px">${L2.map(([id,o])=>`<div class="h" style="--c:${o.isC?'var(--ok)':'var(--prospect)'}"><div style="font-weight:600">${esc(o.nom)}</div><div class="small muted">${esc(o.act||'')} · ${o.d<1?Math.round(o.d*1000)+' m':o.d.toFixed(1)+' km'}${o.tel?' · '+esc(o.tel):''}${o.isC?' · déjà client':''}</div><div class="btns" style="margin-top:6px"><button class="btn sm" data-act="chrShow" data-id="${id}">Voir sur la carte</button><a class="btn sm pri" href="${navTo(o.lat,o.lng)}" target="_blank" rel="noopener">Itinéraire</a>${o.isC?'':`<button class="btn sm" data-act="chrAdd" data-id="${id}">+ Prospect</button>`}</div></div>`).join('')}</div>`)},
+  chrList:()=>{const L2=Object.entries(chrData).sort((a,b)=>a[1].d-b[1].d);const cc=chrCenter||map.getCenter();openSheet(`<h2>${L2.length} ${esc(CHR_Q[chrType]||'établissements')} trouvé(s)</h2><p class="small muted">Triés du plus proche au plus loin. OpenStreetMap ne contient pas de notes : pour voir les mieux notés et les avis, utilise Google Maps.</p><a class="btn pri block" style="margin-top:10px" href="https://www.google.com/maps/search/${encodeURIComponent(CHR_Q[chrType]||'restaurants')}/@${cc.lat.toFixed(5)},${cc.lng.toFixed(5)},15z" target="_blank" rel="noopener">★ Les mieux notés autour (Google Maps)</a><div class="hist" style="margin-top:10px">${L2.map(([id,o])=>`<div class="h" style="--c:${o.isC?'var(--ok)':'var(--prospect)'}"><div style="font-weight:600">${esc(o.nom)}</div><div class="small muted">${esc(o.act||'')} · ${o.d<1?Math.round(o.d*1000)+' m':o.d.toFixed(1)+' km'}${o.tel?' · '+esc(o.tel):''}${o.isC?' · déjà client':''}</div><div class="btns" style="margin-top:6px"><button class="btn sm" data-act="chrShow" data-id="${id}">Voir sur la carte</button><a class="btn sm" href="${gAvis(o)}" target="_blank" rel="noopener">★ Avis Google</a><a class="btn sm pri" href="${navTo(o.lat,o.lng)}" target="_blank" rel="noopener">Itinéraire</a>${o.isC?'':`<button class="btn sm" data-act="chrAdd" data-id="${id}">+ Prospect</button>`}</div></div>`).join('')}</div>`)},
   chrShow:d=>{closeSheet();const m=chrMk[d.id];if(m){map.setView(m.getLatLng(),17);setTimeout(()=>m.openPopup(),300)}},
   chrAdd:d=>{const o=chrData[d.id];if(!o)return;map.closePopup();closeSheet();openClientForm({nom:o.nom,activite:o.act,tel:o.tel,adresse:o.adr,ville:o.ville,lat:+o.lat.toFixed(6),lng:+o.lng.toFixed(6),prospect:true,_src:'Position OpenStreetMap'})},
   detail:d=>{map.closePopup();openDetail(d.id)},visit:d=>{map.closePopup();openVisitForm(d.id)},
