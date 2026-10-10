@@ -73,6 +73,8 @@ main{flex:1;min-height:0;position:relative;overflow:hidden}
 .pop-a{display:flex;gap:6px;flex-wrap:wrap}
 .pin{width:28px;height:28px;border-radius:50%;background:var(--surface);border:3px solid var(--c);color:var(--ink);font:600 13px/22px var(--f-mono);text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.25)}
 .pin.done{background:var(--c);color:#fff}
+.chrpin{width:26px;height:26px;border-radius:50% 50% 50% 4px;transform:rotate(-45deg);background:var(--c);border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);display:grid;place-items:center}
+.chrpin b{transform:rotate(45deg);color:#fff;font:700 12px var(--f-body)}
 .mapbar{position:absolute;left:12px;right:12px;bottom:12px;z-index:500;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .mapbar select,.mapbar .btn{box-shadow:var(--shadow)}
 .mapbar select{min-height:42px;border-radius:12px;border:1px solid var(--line);background:var(--surface);padding:0 10px;font-weight:600;font-size:14px}
@@ -251,7 +253,7 @@ input,select,textarea{font-size:16px!important}
           <option value="5000">5 km</option>
         </select>
         <button class="btn" data-act="chrSearch">Chercher ici</button>
-        <button class="btn icon" data-act="chrClear" id="chrClear" hidden aria-label="Effacer les résultats">✕</button>
+        <button class="btn" data-act="chrList" id="chrListBtn" hidden>Liste</button><button class="btn icon" data-act="chrClear" id="chrClear" hidden aria-label="Effacer les résultats">✕</button>
       </div>
     </section>
 
@@ -291,7 +293,7 @@ input,select,textarea{font-size:16px!important}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script>
 "use strict";
-const APP_VERSION='2026-10-10';
+const APP_VERSION='2026-10-10b';
 /* ---------- utilitaires ---------- */
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -419,7 +421,7 @@ map.on('click',e=>{if(!placing)return;const {lat,lng}=e.latlng,p=placing;placing
 const CHR={hotel:['nwr["tourism"~"^(hotel|guest_house|hostel|motel)$"]'],restaurant:['nwr["amenity"~"^(restaurant|fast_food)$"]'],cafe:['nwr["amenity"="cafe"]'],bar:['nwr["amenity"~"^(bar|pub)$"]']};
 CHR.all=[...CHR.hotel,...CHR.restaurant,...CHR.cafe,...CHR.bar];
 const CHR_LBL={hotel:'Hôtel',guest_house:"Maison d'hôtes",hostel:'Auberge',motel:'Motel',restaurant:'Restaurant',fast_food:'Snack',cafe:'Café',bar:'Bar',pub:'Bar'};
-let chrData={};
+let chrData={},chrMk={},chrCenter=null;
 /* serveurs OpenStreetMap (Overpass) : le principal est souvent saturé, on essaie les miroirs */
 const OVERPASS=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://overpass.private.coffee/api/interpreter','https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
 async function overpass(q){let last;
@@ -432,14 +434,15 @@ async function chrSearch(){
   const type=$('#chrType').value,r=+$('#chrRadius').value,c=map.getCenter();
   const q=`[out:json][timeout:25];(${CHR[type].map(s=>`${s}(around:${r},${c.lat.toFixed(5)},${c.lng.toFixed(5)});`).join('')});out center 250;`;
   toast('Recherche en cours…',8000);
-  try{const js=await overpass(q);chrLayer.clearLayers();chrData={};let n=0;
+  try{const js=await overpass(q);chrLayer.clearLayers();chrData={};chrMk={};chrCenter={lat:c.lat,lng:c.lng};let n=0;const pts=[[c.lat,c.lng]];
     const known=new Set(S.clients.map(c=>norm(c.nom)));
     const col=getComputedStyle(document.documentElement).getPropertyValue('--prospect').trim(),colOk=getComputedStyle(document.documentElement).getPropertyValue('--ok').trim();
     for(const el of js.elements){const lat=el.lat??el.center?.lat,lng=el.lon??el.center?.lon;if(lat==null)continue;const tg=el.tags||{};const nom=tg.name||tg['name:fr']||tg['name:ar'];if(!nom)continue;
       const k=tg.tourism||tg.amenity;const id='o'+el.id;chrData[id]={nom,act:CHR_LBL[k]||k,tel:tg.phone||tg['contact:phone']||'',adr:[tg['addr:street'],tg['addr:city']].filter(Boolean).join(', '),ville:tg['addr:city']||'',lat,lng};
       const isC=known.has(norm(nom));
-      L.circleMarker([lat,lng],{radius:6,color:'#fff',weight:1.5,fillColor:isC?colOk:col,fillOpacity:.9}).bindPopup(`<div class="pop-t">${esc(nom)}</div><div class="pop-s">${esc(chrData[id].act)}${chrData[id].tel?' · '+esc(chrData[id].tel):''}${isC?'<br>Déjà dans tes clients':''}</div><div class="pop-a"><a class="btn sm pri" href="${navTo(lat,lng)}" target="_blank" rel="noopener">Itinéraire</a>${isC?'':`<button class="btn sm" data-act="chrAdd" data-id="${id}">+ Prospect</button>`}</div>`).addTo(chrLayer);n++}
-    $('#chrClear').hidden=!n;toast(n?n+' établissement(s) trouvé(s) dans un rayon de '+(r>=1000?r/1000+' km':r+' m'):'Aucun résultat ici. Élargis le rayon ou déplace la carte.')
+      const letter={hotel:'H',guest_house:'H',hostel:'H',motel:'H',restaurant:'R',fast_food:'S',cafe:'C',bar:'B',pub:'B'}[k]||'•';chrData[id].isC=isC;chrData[id].d=hav(c,{lat,lng});pts.push([lat,lng]);
+      chrMk[id]=L.marker([lat,lng],{icon:L.divIcon({className:'',html:`<div class="chrpin" style="--c:${isC?colOk:col}"><b>${letter}</b></div>`,iconSize:[26,26],iconAnchor:[13,26],popupAnchor:[0,-24]}),zIndexOffset:1000}).bindPopup(`<div class="pop-t">${esc(nom)}</div><div class="pop-s">${esc(chrData[id].act)}${chrData[id].tel?' · '+esc(chrData[id].tel):''}${isC?'<br>Déjà dans tes clients':''}</div><div class="pop-a"><a class="btn sm pri" href="${navTo(lat,lng)}" target="_blank" rel="noopener">Itinéraire</a>${isC?'':`<button class="btn sm" data-act="chrAdd" data-id="${id}">+ Prospect</button>`}</div>`).addTo(chrLayer);n++}
+    $('#chrClear').hidden=!n;$('#chrListBtn').hidden=!n;$('#chrListBtn').textContent='Liste ('+n+')';if(n)map.fitBounds(pts,{padding:[60,60],maxZoom:16});toast(n?n+' établissement(s) trouvé(s) dans un rayon de '+(r>=1000?r/1000+' km':r+' m'):'Aucun résultat ici. Élargis le rayon ou déplace la carte.')
   }catch(e){toast('Recherche indisponible : les 4 serveurs OpenStreetMap n’ont pas répondu. Vérifie ta connexion et réessaie dans une minute.',5500)}}
 
 /* ---------- liens Google Maps ---------- */
@@ -873,8 +876,10 @@ const A={
   locate:()=>locate(p=>{if(p){map.setView([p.lat,p.lng],15);if(cur!=='carte')toast('Position mise à jour')}else startPlacing({type:'me'},'Touche la carte pour placer ta position')}),
   cancelPlace:()=>{const p=placing;placing=null;$('#placeBanner').hidden=true;if(p&&p.type==='client')openClientForm(p.draft,p.back);if(p&&p.type==='tripDepart')show('trip')},
   toggleLegend:()=>{$('#legend').hidden=!$('#legend').hidden},
-  chrSearch:chrSearch,chrClear:()=>{chrLayer.clearLayers();$('#chrClear').hidden=true},
-  chrAdd:d=>{const o=chrData[d.id];if(!o)return;map.closePopup();openClientForm({nom:o.nom,activite:o.act,tel:o.tel,adresse:o.adr,ville:o.ville,lat:+o.lat.toFixed(6),lng:+o.lng.toFixed(6),prospect:true,_src:'Position OpenStreetMap'})},
+  chrSearch:chrSearch,chrClear:()=>{chrLayer.clearLayers();$('#chrClear').hidden=true;$('#chrListBtn').hidden=true},
+  chrList:()=>{const L2=Object.entries(chrData).sort((a,b)=>a[1].d-b[1].d);openSheet(`<h2>${L2.length} résultat(s)</h2><p class="small muted">Triés par distance du centre de la recherche.</p><div class="hist" style="margin-top:10px">${L2.map(([id,o])=>`<div class="h" style="--c:${o.isC?'var(--ok)':'var(--prospect)'}"><div style="font-weight:600">${esc(o.nom)}</div><div class="small muted">${esc(o.act||'')} · ${o.d<1?Math.round(o.d*1000)+' m':o.d.toFixed(1)+' km'}${o.tel?' · '+esc(o.tel):''}${o.isC?' · déjà client':''}</div><div class="btns" style="margin-top:6px"><button class="btn sm" data-act="chrShow" data-id="${id}">Voir sur la carte</button><a class="btn sm pri" href="${navTo(o.lat,o.lng)}" target="_blank" rel="noopener">Itinéraire</a>${o.isC?'':`<button class="btn sm" data-act="chrAdd" data-id="${id}">+ Prospect</button>`}</div></div>`).join('')}</div>`)},
+  chrShow:d=>{closeSheet();const m=chrMk[d.id];if(m){map.setView(m.getLatLng(),17);setTimeout(()=>m.openPopup(),300)}},
+  chrAdd:d=>{const o=chrData[d.id];if(!o)return;map.closePopup();closeSheet();openClientForm({nom:o.nom,activite:o.act,tel:o.tel,adresse:o.adr,ville:o.ville,lat:+o.lat.toFixed(6),lng:+o.lng.toFixed(6),prospect:true,_src:'Position OpenStreetMap'})},
   detail:d=>{map.closePopup();openDetail(d.id)},visit:d=>{map.closePopup();openVisitForm(d.id)},
   newClient:()=>openClientForm({}),editClient:d=>openClientForm({...byId(d.id)}),
   showOnMap:d=>{const c=byId(d.id);closeSheet();show('carte');map.setView([c.lat,c.lng],17)},
