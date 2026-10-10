@@ -430,13 +430,19 @@ async function chrSearch(){
     for(const el of js.elements){const lat=el.lat??el.center?.lat,lng=el.lon??el.center?.lon;if(lat==null)continue;const tg=el.tags||{};const nom=tg.name||tg['name:fr']||tg['name:ar'];if(!nom)continue;
       const k=tg.tourism||tg.amenity;const id='o'+el.id;chrData[id]={nom,act:CHR_LBL[k]||k,tel:tg.phone||tg['contact:phone']||'',adr:[tg['addr:street'],tg['addr:city']].filter(Boolean).join(', '),ville:tg['addr:city']||'',lat,lng};
       const isC=known.has(norm(nom));
-      L.circleMarker([lat,lng],{radius:6,color:'#fff',weight:1.5,fillColor:isC?colOk:col,fillOpacity:.9}).bindPopup(`<div class="pop-t">${esc(nom)}</div><div class="pop-s">${esc(chrData[id].act)}${chrData[id].tel?' · '+esc(chrData[id].tel):''}${isC?'<br>Déjà dans tes clients':''}</div><div class="pop-a"><a class="btn sm pri" href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}" target="_blank" rel="noopener">Itinéraire</a>${isC?'':`<button class="btn sm" data-act="chrAdd" data-id="${id}">+ Prospect</button>`}</div>`).addTo(chrLayer);n++}
+      L.circleMarker([lat,lng],{radius:6,color:'#fff',weight:1.5,fillColor:isC?colOk:col,fillOpacity:.9}).bindPopup(`<div class="pop-t">${esc(nom)}</div><div class="pop-s">${esc(chrData[id].act)}${chrData[id].tel?' · '+esc(chrData[id].tel):''}${isC?'<br>Déjà dans tes clients':''}</div><div class="pop-a"><a class="btn sm pri" href="${navTo(lat,lng)}" target="_blank" rel="noopener">Itinéraire</a>${isC?'':`<button class="btn sm" data-act="chrAdd" data-id="${id}">+ Prospect</button>`}</div>`).addTo(chrLayer);n++}
     $('#chrClear').hidden=!n;toast(n?n+' établissement(s) trouvé(s) dans un rayon de '+(r>=1000?r/1000+' km':r+' m'):'Aucun résultat ici. Élargis le rayon ou déplace la carte.')
   }catch(e){toast('Recherche indisponible (serveur OpenStreetMap occupé ou pas de connexion). Réessaie dans un instant.',5000)}}
 
 /* ---------- liens Google Maps ---------- */
-const gmDir=c=>hasPos(c)?`https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}&travelmode=driving`:'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent([c.nom,c.adresse,c.ville].filter(Boolean).join(', '));
-function gmTour(date){const rest=tour(date).ids.map(byId).filter(c=>hasPos(c)&&!doneOn(c.id,date));if(!rest.length)return null;const pts=rest.slice(0,4),dest=pts[pts.length-1],wp=pts.slice(0,-1);
+const NAV={google:'Google Maps',waze:'Waze',apple:'Plans (Apple)'};
+const navApp=()=>NAV[S.settings.nav]?S.settings.nav:'google';
+function navTo(lat,lng,q){const a=navApp(),has=lat!=null&&lng!=null;
+  if(a==='waze')return has?`https://waze.com/ul?ll=${lat},${lng}&navigate=yes`:`https://waze.com/ul?q=${encodeURIComponent(q||'')}&navigate=yes`;
+  if(a==='apple')return has?`https://maps.apple.com/?daddr=${lat},${lng}&dirflg=d`:`https://maps.apple.com/?q=${encodeURIComponent(q||'')}`;
+  return has?`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`:'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(q||'')}
+const gmDir=c=>hasPos(c)?navTo(c.lat,c.lng):navTo(null,null,[c.nom,c.adresse,c.ville].filter(Boolean).join(', '));
+function gmTour(date){const rest=tour(date).ids.map(byId).filter(c=>hasPos(c)&&!doneOn(c.id,date));if(!rest.length)return null;if(navApp()!=='google')return{u:navTo(rest[0].lat,rest[0].lng),next:rest[0].nom,cut:false};const pts=rest.slice(0,4),dest=pts[pts.length-1],wp=pts.slice(0,-1);
   let u=`https://www.google.com/maps/dir/?api=1&destination=${dest.lat},${dest.lng}&travelmode=driving`;if(myPos)u+=`&origin=${myPos.lat},${myPos.lng}`;if(wp.length)u+='&waypoints='+wp.map(c=>c.lat+','+c.lng).join('%7C');return{u,cut:rest.length>4}}
 
 /* ---------- lecture d'une localisation collée ---------- */
@@ -490,7 +496,7 @@ function renderDay(){
   <div class="sec-h">${esc(fmtDL(dayDate))}<small>${isToday?"aujourd'hui":dayDate<today()?'passé':'à venir'}</small></div>
   <div class="kpis"><div class="kpi"><div class="v">${stops.length}</div><div class="l">Arrêts</div></div><div class="kpi"><div class="v">${done}/${stops.length}</div><div class="l">Visités</div></div><div class="kpi"><div class="v">${t.km!=null?t.km:'—'}</div><div class="l">Km${t.est?' (est.)':''}</div></div><div class="kpi"><div class="v">${fmtDur(t.min)}</div><div class="l">Route</div></div></div>
   ${stops.length?`<div class="progress" aria-label="Avancement ${pct} %"><i style="width:${pct}%"></i></div>`:''}
-  <div class="btns"><button class="btn" data-act="pickOpen">+ Ajouter des clients</button><button class="btn pri" data-act="optimize" ${stops.filter(hasPos).length<2?'disabled':''}>Optimiser l’ordre</button>${nav?`<a class="btn" href="${nav.u}" target="_blank" rel="noopener">Naviguer${nav.cut?' (4 prochains)':''}</a>`:''}</div>`;
+  <div class="btns"><button class="btn" data-act="pickOpen">+ Ajouter des clients</button><button class="btn pri" data-act="optimize" ${stops.filter(hasPos).length<2?'disabled':''}>Optimiser l’ordre</button>${nav?`<a class="btn" href="${nav.u}" target="_blank" rel="noopener">${nav.next?'Aller au prochain client':'Naviguer'+(nav.cut?' (4 prochains)':'')} · ${NAV[navApp()]}</a>`:''}</div>`;
   if(!stops.length)h+=`<div class="empty"><b>Aucune visite planifiée ce jour</b>Ajoute des clients à la journée, ou reprends les suggestions ci-dessous.</div>`;
   else{h+='<div class="stops">';stops.forEach((c,i)=>{const v=doneOn(c.id,dayDate),s=status(c,dayDate);
     h+=`<div class="stop${v?' done':''}" style="--c:${v?'var(--ok)':stColor(s)}"><div class="n">${v?'✓':i+1}</div><div class="who"><div class="nm">${esc(c.nom)}</div><div class="small muted">${esc([c.activite,c.ville].filter(Boolean).join(' · '))}${hasPos(c)?'':' · <b style="color:var(--late)">sans position</b>'}</div>${v?`<div class="small" style="margin-top:2px"><span class="pill" style="--c:${resColor(v.res)}">${resLabel(v.res)}</span> <span class="muted num">${v.dt.slice(11,16)}</span>${v.dist!=null?` <span class="muted">· check-in à ${v.dist<1000?v.dist+' m':(v.dist/1000).toFixed(1)+' km'}</span>`:''}</div>`:`<div class="small" style="margin-top:2px"><span class="pill" style="--c:${stColor(s)}">${ST[s][0]}</span> <span class="muted">${esc(sinceTxt(c))}</span></div>`}</div>
@@ -670,11 +676,14 @@ function renderPlus(){const nopos=S.clients.filter(c=>!hasPos(c)).length,nogeo=S
   <div class="card"><h3>Exporter</h3><p class="small muted" style="margin:0 0 10px">Excel : 3 feuilles (Clients, Visites, Tournées). PDF : rapport de la période choisie dans Stats (${esc(periodRange(statsPeriod)[2])}).</p><div class="btns"><button class="btn" data-act="exportXlsx">Excel</button><button class="btn" data-act="exportPdf">Rapport PDF</button></div></div>
   <div class="card"><h3>Sauvegarde</h3><p class="small muted" style="margin:0 0 10px">Tes données sont gardées uniquement dans ce navigateur, sur ce téléphone. Si tu vides le cache ou changes d’appareil, elles sont perdues : fais une sauvegarde régulière.</p><div class="btns"><button class="btn pri" data-act="backup">Sauvegarder (.json)</button><button class="btn" data-act="restorePick">Restaurer</button></div>${storageOK?'':'<p class="small" style="color:var(--late)">Le stockage du navigateur est bloqué : rien n’est enregistré entre deux ouvertures.</p>'}</div>
   <div class="card"><h3>Réglages</h3><div class="form" style="margin-top:0"><label class="field"><span>Fréquence de visite par défaut (jours)</span><input type="number" id="setFreq" min="1" max="365" value="${S.settings.freq}"></label>
+  <label class="field"><span>Application de navigation</span><select id="setNav">${Object.entries(NAV).map(([k,l])=>`<option value="${k}" ${navApp()===k?'selected':''}>${l}</option>`).join('')}</select></label>
+  <p class="small muted" style="margin:-4px 0 0">${navApp()==='google'?'Google Maps : itinéraire avec plusieurs arrêts (4 par lien sur téléphone).':navApp()==='waze'?'Waze n’accepte qu’une destination par lien : la navigation se fait client par client.':'Avec Plans, la navigation se fait client par client (une destination par lien).'}</p>
   <div class="field"><span>Point de départ (si GPS indisponible)</span><div class="small">${S.settings.depart?`<span class="num">${S.settings.depart.lat.toFixed(5)}, ${S.settings.depart.lng.toFixed(5)}</span>`:'<span class="muted">Non défini</span>'}</div><div class="btns" style="margin-top:6px"><button class="btn sm" data-act="departHere">Ma position actuelle</button><button class="btn sm" data-act="departPlace">Placer sur la carte</button>${S.settings.depart?'<button class="btn sm danger" data-act="departClear">Effacer</button>':''}</div></div></div></div>
   <div class="card"><h3>Clients sans position · ${nopos}</h3><p class="small muted" style="margin:0 0 10px">Recherche approximative par adresse et ville (OpenStreetMap, 1 client par seconde). La couverture des adresses au Maroc est incomplète : vérifie chaque point sur la carte.</p><button class="btn" data-act="geocode" ${nogeo&&!geoRunning?'':'disabled'}>${geoRunning?'En cours…':`Localiser par adresse (${nogeo})`}</button></div>
   <div class="card"><h3>GPS et installation</h3><p class="small muted" style="margin:0">${https?'Page en https : le GPS fonctionne si tu autorises la localisation.':'Cette page n’est pas en https : le navigateur bloque le GPS. Héberge le fichier gratuitement (par exemple sur app.netlify.com/drop ou tiiny.host) puis ouvre le lien sur ton téléphone.'} Pour l’avoir comme une appli : menu du navigateur → « Ajouter à l’écran d’accueil ».</p></div>
   <div class="card"><h3>Effacer</h3><div class="btns">${demo?'<button class="btn" data-act="clearDemo">Effacer les exemples</button>':''}<button class="btn danger" data-act="clearAll">Tout effacer</button></div></div>`;
-  $('#setFreq').onchange=e=>{S.settings.freq=Math.max(1,+e.target.value||14);save()}}
+  $('#setFreq').onchange=e=>{S.settings.freq=Math.max(1,+e.target.value||14);save()};
+  $('#setNav').onchange=e=>{S.settings.nav=e.target.value;save();toast('Navigation : '+NAV[navApp()]);renderPlus()}}
 
 function demoBanner(){return S.clients.some(c=>c.demo)?`<div class="banner"><span>Données d’exemple affichées (clients fictifs à Casablanca).</span><button class="btn sm" data-act="clearDemo">Effacer les exemples</button></div>`:''}
 
@@ -778,9 +787,10 @@ function drawTrip(){tripLayer.clearLayers();$('#tripHide').hidden=!tripShown;con
 function dayLinks(d){const t=S.trip,dep=t.depart;const st=d.from?byId(d.from):null;
   const origin=st&&hasPos(st)?{lat:+st.lat,lng:+st.lng}:{lat:dep.lat,lng:dep.lng};
   const seq=d.stops.map(s=>byId(s.id)).filter(hasPos).map(c=>({lat:+c.lat,lng:+c.lng}));if(d.ret)seq.push({lat:dep.lat,lng:dep.lng});
+  if(navApp()!=='google'){const c=d.stops.map(s=>byId(s.id)).find(hasPos);return c?[{u:navTo(c.lat,c.lng),l:'1er client · '+NAV[navApp()]}]:[]}
   const links=[];let o=origin,i=0;while(i<seq.length){const part=seq.slice(i,i+4);const dest=part[part.length-1],wp=part.slice(0,-1);
     links.push(`https://www.google.com/maps/dir/?api=1&origin=${o.lat},${o.lng}&destination=${dest.lat},${dest.lng}&travelmode=driving`+(wp.length?'&waypoints='+wp.map(q=>q.lat+','+q.lng).join('%7C'):''));o=dest;i+=4}
-  return links}
+  return links.map((u,j)=>({u,l:'Naviguer'+(links.length>1?' partie '+(j+1)+'/'+links.length:'')}))}
 
 function renderTrip(){const t=tripInit();const cities=cityList();
   if(t.cities===null)t.cities=[];
@@ -811,7 +821,7 @@ function renderTrip(){const t=tripInit();const cities=cityList();
       <div class="leg start"><span class="h">${t.hStart}</span><span>Départ ${from?'de '+esc(from.ville||from.nom)+' (nuit précédente)':'de '+esc(dep.label||'ton point de départ')}</span><span></span></div>
       ${d.stops.map((s,k)=>{const c=byId(s.id)||{nom:'(client supprimé)'};return`<div class="leg"><span class="h">${fmtH(s.arr)}</span><div style="min-width:0"><div class="nm">${k+1}. ${esc(c.nom)}</div><div class="small muted">${esc([c.activite,c.ville].filter(Boolean).join(' · '))}${c.id?` · <a href="${gmDir(c)}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">Y aller</a>`:''}</div></div><span class="d">${fmtDur(s.drive)}<br>${s.km} km</span></div>`}).join('')}
       ${d.ret?`<div class="leg end"><span class="h">${fmtH(d.ret.arr)}</span><span>Retour ${esc(dep.label||'au point de départ')}${d.ret.late?' <span class="warn">· après ta fin de journée</span>':''}</span><span class="d">${fmtDur(d.ret.drive)}<br>${d.ret.km} km</span></div>`:night?`<div class="leg end"><span class="h">Nuit</span><span>Près de ${esc(night.nom)}${night.ville?', '+esc(night.ville):''}</span><span></span></div>`:''}
-      <div class="day-f">${links.map((u,j)=>`<a class="btn sm pri" href="${u}" target="_blank" rel="noopener">Naviguer${links.length>1?' partie '+(j+1)+'/'+links.length:''}</a>`).join('')}${night?`<a class="btn sm" href="https://www.google.com/maps/search/h%C3%B4tel/@${night.lat},${night.lng},14z" target="_blank" rel="noopener">Hôtels autour</a>`:''}</div></div>`})}
+      <div class="day-f">${links.map(x=>`<a class="btn sm pri" href="${x.u}" target="_blank" rel="noopener">${x.l}</a>`).join('')}${night?`<a class="btn sm" href="https://www.google.com/maps/search/h%C3%B4tel/@${night.lat},${night.lng},14z" target="_blank" rel="noopener">Hôtels autour</a>`:''}</div></div>`})}
   $('#tripBody').innerHTML=h;
   const upd=(k,v)=>{t[k]=v;staleTrip();save()};
   $('#tDate').onchange=e=>{if(e.target.value){upd('date',e.target.value);renderTrip()}};
