@@ -291,6 +291,7 @@ input,select,textarea{font-size:16px!important}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script>
 "use strict";
+const APP_VERSION='2026-10-10';
 /* ---------- utilitaires ---------- */
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -688,6 +689,7 @@ function renderPlus(){const nopos=S.clients.filter(c=>!hasPos(c)).length,nogeo=S
   <div class="field"><span>Point de départ (si GPS indisponible)</span><div class="small">${S.settings.depart?`<span class="num">${S.settings.depart.lat.toFixed(5)}, ${S.settings.depart.lng.toFixed(5)}</span>`:'<span class="muted">Non défini</span>'}</div><div class="btns" style="margin-top:6px"><button class="btn sm" data-act="departHere">Ma position actuelle</button><button class="btn sm" data-act="departPlace">Placer sur la carte</button>${S.settings.depart?'<button class="btn sm danger" data-act="departClear">Effacer</button>':''}</div></div></div></div>
   <div class="card"><h3>Clients sans position · ${nopos}</h3><p class="small muted" style="margin:0 0 10px">Recherche approximative par adresse et ville (OpenStreetMap, 1 client par seconde). La couverture des adresses au Maroc est incomplète : vérifie chaque point sur la carte.</p><button class="btn" data-act="geocode" ${nogeo&&!geoRunning?'':'disabled'}>${geoRunning?'En cours…':`Localiser par adresse (${nogeo})`}</button></div>
   <div class="card"><h3>GPS et installation</h3><p class="small muted" style="margin:0">${https?'Page en https : le GPS fonctionne si tu autorises la localisation.':'Cette page n’est pas en https : le navigateur bloque le GPS. Héberge le fichier gratuitement (par exemple sur app.netlify.com/drop ou tiiny.host) puis ouvre le lien sur ton téléphone.'} Pour l’avoir comme une appli : menu du navigateur → « Ajouter à l’écran d’accueil ».</p></div>
+  <div class="card"><h3>Mise à jour</h3><p class="small muted" style="margin:0 0 10px">Version installée : <span class="num">${APP_VERSION}</span>. Tes données restent sur le téléphone pendant la mise à jour.</p><button class="btn" data-act="update">Charger la dernière version</button></div>
   <div class="card"><h3>Effacer</h3><div class="btns">${demo?'<button class="btn" data-act="clearDemo">Effacer les exemples</button>':''}<button class="btn danger" data-act="clearAll">Tout effacer</button></div></div>`;
   $('#setFreq').onchange=e=>{S.settings.freq=Math.max(1,+e.target.value||14);save()};
   $('#setNav').onchange=e=>{S.settings.nav=e.target.value;save();toast('Navigation : '+NAV[navApp()]);renderPlus()}}
@@ -901,6 +903,7 @@ const A={
   departHere:()=>locate(p=>{if(p&&!p.manual){S.settings.depart={lat:p.lat,lng:p.lng};save();renderPlus();toast('Point de départ enregistré')}else toast('GPS indisponible : place le point sur la carte.')},true),
   departPlace:()=>startPlacing({type:'depart'},'Touche ton point de départ (domicile, dépôt…)'),
   departClear:()=>{S.settings.depart=null;save();renderPlus()},
+  update:async()=>{toast('Recherche de la dernière version…',6000);try{await fetch(location.pathname,{cache:'reload'});await fetch(location.href,{cache:'reload'})}catch(e){toast('Pas de connexion : réessaie plus tard.');return}location.reload()},
   geocode:geocodeAll,clearDemo:()=>askConfirm('Effacer les exemples ?','Les clients, visites et tournées fictifs seront supprimés. Tes propres données restent.','Effacer',clearDemo),
   clearAll:()=>askConfirm('Tout effacer ?','Clients, visites et tournées seront supprimés de ce téléphone. Fais une sauvegarde avant si besoin.','Tout effacer',()=>{S=blank();S.seeded=true;save();for(const k in routeGeom)delete routeGeom[k];toast('Données effacées');renderAll()})
 };
