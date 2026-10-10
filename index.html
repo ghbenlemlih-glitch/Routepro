@@ -419,12 +419,19 @@ const CHR={hotel:['nwr["tourism"~"^(hotel|guest_house|hostel|motel)$"]'],restaur
 CHR.all=[...CHR.hotel,...CHR.restaurant,...CHR.cafe,...CHR.bar];
 const CHR_LBL={hotel:'Hôtel',guest_house:"Maison d'hôtes",hostel:'Auberge',motel:'Motel',restaurant:'Restaurant',fast_food:'Snack',cafe:'Café',bar:'Bar',pub:'Bar'};
 let chrData={};
+/* serveurs OpenStreetMap (Overpass) : le principal est souvent saturé, on essaie les miroirs */
+const OVERPASS=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://overpass.private.coffee/api/interpreter','https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
+async function overpass(q){let last;
+  for(const u of OVERPASS){try{const ctl=new AbortController();const tm=setTimeout(()=>ctl.abort(),20000);
+    const res=await fetch(u,{method:'POST',body:'data='+encodeURIComponent(q),headers:{'Content-Type':'application/x-www-form-urlencoded'},signal:ctl.signal});clearTimeout(tm);
+    if(!res.ok){last=res.status;continue}return await res.json()}catch(e){last=e}}
+  throw last||new Error('overpass')}
 async function chrSearch(){
+  if(map.getZoom()<12){if(myPos){map.setView([myPos.lat,myPos.lng],14)}else{toast('Zoome d’abord sur la ville où tu veux chercher, puis touche « Chercher ici ».',4500);return}}
   const type=$('#chrType').value,r=+$('#chrRadius').value,c=map.getCenter();
   const q=`[out:json][timeout:25];(${CHR[type].map(s=>`${s}(around:${r},${c.lat.toFixed(5)},${c.lng.toFixed(5)});`).join('')});out center 250;`;
   toast('Recherche en cours…',8000);
-  try{const res=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(q),headers:{'Content-Type':'application/x-www-form-urlencoded'}});
-    if(!res.ok)throw new Error(res.status);const js=await res.json();chrLayer.clearLayers();chrData={};let n=0;
+  try{const js=await overpass(q);chrLayer.clearLayers();chrData={};let n=0;
     const known=new Set(S.clients.map(c=>norm(c.nom)));
     const col=getComputedStyle(document.documentElement).getPropertyValue('--prospect').trim(),colOk=getComputedStyle(document.documentElement).getPropertyValue('--ok').trim();
     for(const el of js.elements){const lat=el.lat??el.center?.lat,lng=el.lon??el.center?.lon;if(lat==null)continue;const tg=el.tags||{};const nom=tg.name||tg['name:fr']||tg['name:ar'];if(!nom)continue;
@@ -432,7 +439,7 @@ async function chrSearch(){
       const isC=known.has(norm(nom));
       L.circleMarker([lat,lng],{radius:6,color:'#fff',weight:1.5,fillColor:isC?colOk:col,fillOpacity:.9}).bindPopup(`<div class="pop-t">${esc(nom)}</div><div class="pop-s">${esc(chrData[id].act)}${chrData[id].tel?' · '+esc(chrData[id].tel):''}${isC?'<br>Déjà dans tes clients':''}</div><div class="pop-a"><a class="btn sm pri" href="${navTo(lat,lng)}" target="_blank" rel="noopener">Itinéraire</a>${isC?'':`<button class="btn sm" data-act="chrAdd" data-id="${id}">+ Prospect</button>`}</div>`).addTo(chrLayer);n++}
     $('#chrClear').hidden=!n;toast(n?n+' établissement(s) trouvé(s) dans un rayon de '+(r>=1000?r/1000+' km':r+' m'):'Aucun résultat ici. Élargis le rayon ou déplace la carte.')
-  }catch(e){toast('Recherche indisponible (serveur OpenStreetMap occupé ou pas de connexion). Réessaie dans un instant.',5000)}}
+  }catch(e){toast('Recherche indisponible : les 4 serveurs OpenStreetMap n’ont pas répondu. Vérifie ta connexion et réessaie dans une minute.',5500)}}
 
 /* ---------- liens Google Maps ---------- */
 const NAV={google:'Google Maps',waze:'Waze',apple:'Plans (Apple)'};
