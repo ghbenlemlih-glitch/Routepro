@@ -293,7 +293,7 @@ input,select,textarea{font-size:16px!important}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script>
 "use strict";
-const APP_VERSION='2026-10-10d';
+const APP_VERSION='2026-10-10e';
 /* ---------- utilitaires ---------- */
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -722,6 +722,19 @@ function setTripDepart(lat,lng,label){const t=tripInit();t.depart={lat:+lat,lng:
 function staleTrip(){if(S.trip&&S.trip.plan)S.trip.plan.stale=true}
 function cityList(){const m=new Map();for(const c of S.clients){if(!hasPos(c))continue;const k=cityKey(c);if(!m.has(k))m.set(k,{k,name:c.ville||'Sans ville',n:0,lat:0,lng:0});const o=m.get(k);o.n++;o.lat+=+c.lat;o.lng+=+c.lng}
   return[...m.values()].map(o=>({...o,lat:o.lat/o.n,lng:o.lng/o.n})).sort((a,b)=>a.name.localeCompare(b.name,'fr'))}
+/* villes présentes dans le déplacement, dans l'ordre choisi (manuel) */
+function tripCityOrder(){const t=tripInit(),present=[];for(const c of tripClients()){const k=cityKey(c);if(!present.includes(k))present.push(k)}
+  t.cityOrder=(t.cityOrder||[]).filter(k=>present.includes(k));for(const k of present)if(!t.cityOrder.includes(k))t.cityOrder.push(k);return t.cityOrder}
+function cityName(k){const c=S.clients.find(c=>cityKey(c)===k);return c&&c.ville?c.ville:'Sans ville'}
+/* ordre manuel : villes dans l'ordre choisi, clients optimisés à l'intérieur de chaque ville */
+function manualOrder(cl,M,order){const out=[];let pos=0;
+  for(const k of order){let left=cl.map((c,i)=>i+1).filter(i=>cityKey(cl[i-1])===k);if(!left.length)continue;
+    const seg=[];while(left.length){let b=0;for(let j=1;j<left.length;j++)if(M.dur[pos][left[j]]<M.dur[pos][left[b]])b=j;pos=left.splice(b,1)[0];seg.push(pos)}
+    const start=out.length?out[out.length-1]:0;let imp=true,g=0;const c=(a,b)=>M.dur[a][b];
+    while(imp&&g++<100){imp=false;for(let i=0;i<seg.length-1;i++)for(let j=i+1;j<seg.length;j++){const prev=i===0?start:seg[i-1],nxt=j+1<seg.length?seg[j+1]:null;
+      const d=c(prev,seg[j])-c(prev,seg[i])+(nxt!=null?c(seg[i],nxt)-c(seg[j],nxt):0);if(d<-1e-6){seg.splice(i,j-i+1,...seg.slice(i,j+1).reverse());imp=true}}}
+    out.push(...seg);pos=seg[seg.length-1]}
+  return out}
 function tripClients(){const t=tripInit(),cs=new Set(t.cities||[]),ex=new Set(t.excluded),ad=new Set(t.added);
   return S.clients.filter(c=>hasPos(c)&&((cs.has(cityKey(c))&&!ex.has(c.id))||ad.has(c.id)))}
 function nextWorkDay(d,noSun){let x=addDays(d,1);if(noSun&&new Date(x+'T12:00').getDay()===0)x=addDays(x,1);return x}
@@ -776,8 +789,10 @@ async function computeTrip(){const t=tripInit();
   tripBusy=true;renderTrip();
   const pts=[{lat:t.depart.lat,lng:t.depart.lng},...cl.map(c=>({lat:+c.lat,lng:+c.lng}))];
   const M=await travelMatrix(pts);const raw=closedTour(M);const city=[' depart',...cl.map(cityKey)];
-  const A1=splitDays(groupByCity(raw,city,M),M,t,city),A2=splitDays(groupByCity([...raw].reverse(),city,M),M,t,city);
-  const score=d=>d.length*10000+d.reduce((s,x)=>s+x.drive,0);const days=score(A2)<score(A1)?A2:A1;
+  let days;
+  if(t.cityMode==='manual'){days=splitDays(manualOrder(cl,M,tripCityOrder()),M,t,city)}
+  else{const A1=splitDays(groupByCity(raw,city,M),M,t,city),A2=splitDays(groupByCity([...raw].reverse(),city,M),M,t,city);
+    const score=d=>d.length*10000+d.reduce((s,x)=>s+x.drive,0);days=score(A2)<score(A1)?A2:A1}
   const ids=[null,...cl.map(c=>c.id)];
   t.plan={est:M.est,stale:false,at:new Date().toISOString(),days:days.map(d=>({date:d.date,from:d.from===0?null:ids[d.from],night:d.night!=null?ids[d.night]:null,km:+d.km.toFixed(1),drive:Math.round(d.drive),over:!!d.over,
     stops:d.stops.map(s=>({id:ids[s.i],arr:Math.round(s.arr),drive:Math.round(s.drive),km:+s.km.toFixed(1)})),ret:d.ret?{drive:Math.round(d.ret.drive),km:+d.ret.km.toFixed(1),arr:Math.round(d.ret.arr),late:d.ret.late}:null}))};
@@ -821,6 +836,9 @@ function renderTrip(){const t=tripInit();const cities=cityList();
     <label class="check"><input type="checkbox" id="tSun" ${t.noSunday?'checked':''}> Pas de visites le dimanche</label></div></div>
   <div class="card"><h3>Villes · ${sel.size} cochée(s)</h3>${cities.length?`<div class="chipwrap">${cities.map(c=>`<button class="chip city" data-act="tCity" data-k="${esc(c.k)}" aria-pressed="${sel.has(c.k)}">${esc(c.name)}<span class="num">${c.n}</span></button>`).join('')}</div><div class="btns" style="margin-top:10px"><button class="btn sm ghost" data-act="tCityAll">Tout cocher</button><button class="btn sm ghost" data-act="tCityNone">Tout décocher</button></div>`:'<p class="small muted">Aucun client localisé. Ajoute ou importe tes clients avec leur position.</p>'}
     <p class="small muted" style="margin:8px 0 0">Seuls les clients avec une position sont listés. Les villes viennent du champ « Ville » de chaque fiche.</p></div>
+  ${(()=>{const ord=tripCityOrder();if(ord.length<2)return'';const man=t.cityMode==='manual';
+    return`<div class="card"><h3>Ordre des villes</h3><div class="seg" style="grid-template-columns:1fr 1fr"><button data-act="tMode" data-m="auto" aria-pressed="${!man}">Automatique</button><button data-act="tMode" data-m="manual" aria-pressed="${man}">Je choisis</button></div>
+    ${man?`<p class="small muted" style="margin:10px 0 8px">Départ de ${esc(dep?dep.label||'ton point de départ':'ton point de départ')}, puis les villes dans cet ordre, puis retour. Dans chaque ville, l’ordre des clients reste optimisé.</p><div class="mini" style="max-height:none">${ord.map((k,i)=>`<div><span><b class="num" style="color:var(--accent);margin-right:8px">${i+1}</b><b style="font-weight:600">${esc(cityName(k))}</b> <span class="small muted">${tripClients().filter(c=>cityKey(c)===k).length} client(s)</span></span><span class="btns" style="flex-wrap:nowrap;gap:4px"><button class="btn sm icon" data-act="tCUp" data-i="${i}" ${i===0?'disabled':''} aria-label="Monter">↑</button><button class="btn sm icon" data-act="tCDown" data-i="${i}" ${i===ord.length-1?'disabled':''} aria-label="Descendre">↓</button></span></div>`).join('')}</div>`:'<p class="small muted" style="margin:10px 0 0">L’appli choisit l’ordre des villes qui fait le moins de route.</p>'}</div>`})()}
   <div class="card"><h3>Clients à visiter · ${cl.length}</h3>${cl.length?`<div class="mini">${cl.sort((a,b)=>(a.ville||'').localeCompare(b.ville||'','fr')||a.nom.localeCompare(b.nom,'fr')).map(c=>{const s=status(c);return`<div><span><i class="dot" style="--c:${stColor(s)};display:inline-block;margin-right:6px"></i><b style="font-weight:600">${esc(c.nom)}</b> <span class="small muted">${esc(c.ville||'')}</span></span><button class="btn sm icon" data-act="tEx" data-id="${c.id}" aria-label="Retirer ${esc(c.nom)}">✕</button></div>`}).join('')}</div>`:'<p class="small muted">Coche une ou plusieurs villes.</p>'}
     ${ex.length?`<p class="small muted" style="margin:10px 0 4px">Retirés (${ex.length}) :</p><div class="chipwrap">${ex.map(c=>`<button class="chip" data-act="tIn" data-id="${c.id}">↺ ${esc(c.nom)}</button>`).join('')}</div>`:''}
     <div class="btns" style="margin-top:10px"><button class="btn sm" data-act="tAddPick">+ Ajouter un client d’une autre ville</button></div></div>
@@ -859,6 +877,9 @@ const TA={
   tdHere:()=>locate(p=>{if(p&&!p.manual){setTripDepart(p.lat,p.lng,'Ma position');renderTrip()}else toast('GPS indisponible : place le point sur la carte ou colle un lien.')},true),
   tdSaved:()=>{setTripDepart(S.settings.depart.lat,S.settings.depart.lng,'Point de départ enregistré');renderTrip()},
   tdPlace:()=>startPlacing({type:'tripDepart'},'Touche ton point de départ et de retour'),
+  tMode:d=>{const t=tripInit();t.cityMode=d.m;staleTrip();save();renderTrip()},
+  tCUp:d=>{const o=tripCityOrder(),i=+d.i;if(i>0){[o[i-1],o[i]]=[o[i],o[i-1]];staleTrip();save();renderTrip()}},
+  tCDown:d=>{const o=tripCityOrder(),i=+d.i;if(i<o.length-1){[o[i+1],o[i]]=[o[i],o[i+1]];staleTrip();save();renderTrip()}},
   tCity:d=>{const t=tripInit();const i=t.cities.indexOf(d.k);if(i>=0)t.cities.splice(i,1);else t.cities.push(d.k);staleTrip();save();renderTrip()},
   tCityAll:()=>{const t=tripInit();t.cities=cityList().map(c=>c.k);staleTrip();save();renderTrip()},
   tCityNone:()=>{const t=tripInit();t.cities=[];staleTrip();save();renderTrip()},
