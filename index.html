@@ -296,7 +296,7 @@ input,select,textarea{font-size:16px!important}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script>
 "use strict";
-const APP_VERSION='2026-10-13b';
+const APP_VERSION='2026-10-13c';
 /* ---------- utilitaires ---------- */
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -831,7 +831,18 @@ function openNightPicker(di){const p=S.trip.plan;if(!p||!p.mx){toast('Recalcule 
   <div class="field"><span>Villes de tes clients</span><div class="chipwrap">${cities.map(c=>`<button class="chip" data-act="tNightSet" data-d="${di}" data-k="${esc(c.k)}" aria-pressed="${!!(d.nightAt&&d.nightAt.label===c.name)}">${esc(c.name)}</button>`).join('')}</div></div>
   <div class="field"><span>Autre ville</span><div class="btns" style="flex-wrap:nowrap"><input id="nightQ" placeholder="Ex. Chefchaouen" style="flex:1;min-width:0"><button class="btn" data-act="tNightFind" data-d="${di}" style="flex:none">Chercher</button></div><div class="small muted" id="nightRes"></div></div>
   <button class="btn ghost" data-act="tNightMap" data-d="${di}">Placer sur la carte</button></div>`)}
-function setNight(di,v){const p=S.trip.plan;if(v)p.days[di].nightAt=v;else delete p.days[di].nightAt;recalcPlan();save();tripGeom={};closeSheet();if(cur!=='trip')show('trip');else renderTrip();fetchTripGeom();toast(v?'Nuit à '+v.label:'Nuit près du dernier client')}
+/* remplit le temps libre d'une journée avec les clients des jours suivants qui sont sur le trajet (ou dans la ville de la nuit) */
+function fillDay(di){const t=S.trip,p=t.plan,mx=p.mx;if(!mx)return 0;const E0=toMin(t.hEnd),V=+t.visitMin||30,ix=id=>mx.ids.indexOf(id);let moved=0;
+  const pt=id=>{const c=byId(id);return c&&hasPos(c)?{lat:+c.lat,lng:+c.lng}:null};
+  for(let guard=0;guard<40;guard++){recalcPlan();const d=p.days[di];if(!d||di>=p.days.length-1||!d.stops.length)break;
+    const last=d.stops[d.stops.length-1],li=ix(last.id),end=last.arr+V,night=d.nightAt;let best=null;
+    for(let dj=di+1;dj<p.days.length;dj++)p.days[dj].stops.forEach((s,sj)=>{const ci=ix(s.id);if(ci<0||!pt(s.id))return;const dr=mx.dur[li][ci];
+      if(end+dr+V>E0)return;const detour=dr+(night&&pt(last.id)?estLeg(pt(s.id),night).min-estLeg(pt(last.id),night).min:0);
+      if(detour>90)return;if(!best||detour<best.detour)best={dj,sj,detour}});
+    if(!best)break;d.stops.push(p.days[best.dj].stops.splice(best.sj,1)[0]);moved++}
+  recalcPlan();return moved}
+function setNight(di,v){const p=S.trip.plan;if(v)p.days[di].nightAt=v;else delete p.days[di].nightAt;recalcPlan();const n=v?fillDay(di):0;save();tripGeom={};closeSheet();if(cur!=='trip')show('trip');else renderTrip();fetchTripGeom();
+  toast((v?'Nuit à '+v.label:'Nuit près du dernier client')+(n?' · '+n+' client(s) du lendemain avancé(s) sur ton trajet':''),4500)}
 function moveTripStop(di,si,dir){const p=S.trip.plan;if(!p||!p.mx){toast('Recalcule d’abord l’itinéraire pour pouvoir déplacer les clients.',4500);return}
   const day=p.days[di],st=day.stops;const j=si+dir;
   if(j>=0&&j<st.length){[st[si],st[j]]=[st[j],st[si]]}
@@ -892,7 +903,7 @@ function renderTrip(){const t=tripInit();const cities=cityList();
       h+=`<div class="day" style="--dc:${col}"><div class="day-h"><b>Jour ${i+1}</b><span>${esc(fmtDL(d.date))}</span><span class="meta num">${d.km} km · ${fmtDur(d.drive)} de route</span>${d.over?'<span class="small warn" style="flex-basis:100%">Fin de journée dépassée pour terminer la ville</span>':''}</div>
       <div class="leg start"><span class="h">${t.hStart}</span><span>Départ ${prevNight(d)?'de '+esc(prevNight(d).label)+' (nuit)':from?'de '+esc(from.ville||from.nom)+' (nuit précédente)':'de '+esc(dep.label||'ton point de départ')}</span><span></span></div>
       ${d.stops.map((s,k)=>{const c=byId(s.id)||{nom:'(client supprimé)'};return`<div class="leg"><span class="h">${fmtH(s.arr)}</span><div style="min-width:0"><div class="nm">${k+1}. ${esc(c.nom)}</div><div class="small muted">${esc([c.activite,c.ville].filter(Boolean).join(' · '))}${c.id?` · <a href="${gmDir(c)}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">Y aller</a>`:''}</div><div class="btns" style="gap:4px;margin-top:5px;flex-wrap:nowrap"><button class="btn sm" style="min-height:30px" data-act="tMv" data-d="${i}" data-s="${k}" data-dir="-1" ${i===0&&k===0?'disabled':''}>${k===0?'↑ Jour précédent':'↑ Avancer'}</button><button class="btn sm" style="min-height:30px" data-act="tMv" data-d="${i}" data-s="${k}" data-dir="1" ${i===p.days.length-1&&d.stops.length===1?'disabled':''}>${k===d.stops.length-1?'↓ Jour suivant':'↓ Reculer'}</button></div></div><span class="d">${fmtDur(s.drive)}<br>${s.km} km</span></div>`}).join('')}
-      ${d.ret?`<div class="leg end"><span class="h">${fmtH(d.ret.arr)}</span><span>Retour ${esc(dep.label||'au point de départ')}${d.ret.late?' <span class="warn">· après ta fin de journée</span>':''}</span><span class="d">${fmtDur(d.ret.drive)}<br>${d.ret.km} km</span></div>`:night?`<div class="leg end"><span class="h">${d.nightLeg?fmtH(d.nightLeg.arr):'Nuit'}</span><div style="min-width:0"><div>${d.nightAt?'Nuit à <b>'+esc(d.nightAt.label)+'</b>':'Nuit près de '+esc(night.nom)+(night.ville?', '+esc(night.ville):'')}</div><button class="btn sm" style="min-height:30px;margin-top:5px" data-act="tNight" data-d="${i}">Choisir la ville de la nuit</button></div><span class="d">${d.nightLeg?fmtDur(d.nightLeg.drive)+'<br>'+d.nightLeg.km+' km':''}</span></div>`:''}
+      ${d.ret?`<div class="leg end"><span class="h">${fmtH(d.ret.arr)}</span><span>Retour ${esc(dep.label||'au point de départ')}${d.ret.late?' <span class="warn">· après ta fin de journée</span>':''}</span><span class="d">${fmtDur(d.ret.drive)}<br>${d.ret.km} km</span></div>`:night?`<div class="leg end"><span class="h">${d.nightLeg?fmtH(d.nightLeg.arr):'Nuit'}</span><div style="min-width:0"><div>${d.nightAt?'Nuit à <b>'+esc(d.nightAt.label)+'</b>':'Nuit près de '+esc(night.nom)+(night.ville?', '+esc(night.ville):'')}</div><div class="btns" style="gap:4px;margin-top:5px"><button class="btn sm" style="min-height:30px" data-act="tNight" data-d="${i}">Choisir la ville de la nuit</button><button class="btn sm" style="min-height:30px" data-act="tFill" data-d="${i}">Remplir le temps libre</button></div></div><span class="d">${d.nightLeg?fmtDur(d.nightLeg.drive)+'<br>'+d.nightLeg.km+' km':''}</span></div>`:''}
       <div class="day-f">${links.map(x=>`<a class="btn sm pri" href="${x.u}" target="_blank" rel="noopener">${x.l}</a>`).join('')}${(()=>{const last=d.nightAt||night||byId((d.stops[d.stops.length-1]||{}).id);if(!last||!hasPos(last))return'';return(night?`<button class="btn sm" data-act="aroundAt" data-type="hotel" data-lat="${last.lat}" data-lng="${last.lng}">Hôtels autour</button>`:'')+`<button class="btn sm" data-act="aroundAt" data-type="restaurant" data-lat="${last.lat}" data-lng="${last.lng}">Restaurants autour</button>`})()}</div></div>`})}
   $('#tripBody').innerHTML=h;
   const upd=(k,v)=>{t[k]=v;staleTrip();save()};
@@ -930,6 +941,8 @@ const TA={
   tCompute:computeTrip,
   tMv:d=>moveTripStop(+d.d,+d.s,+d.dir),
   tNight:d=>openNightPicker(+d.d),
+  tFill:d=>{const p=S.trip.plan;if(!p||!p.mx){toast('Recalcule d’abord l’itinéraire.',4000);return}const n=fillDay(+d.d);save();tripGeom={};renderTrip();fetchTripGeom();
+    toast(n?n+' client(s) avancé(s) dans cette journée':'Aucun client des jours suivants ne rentre dans le temps libre de cette journée.',4500)},
   tNightSet:d=>{if(!d.k){setNight(+d.d,null);return}const c=cityList().find(x=>x.k===d.k);if(c)setNight(+d.d,{lat:c.lat,lng:c.lng,label:c.name})},
   tNightFind:async d=>{const q=$('#nightQ').value.trim();if(!q)return;const r=$('#nightRes');r.textContent='Recherche…';
     try{const res=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=ma&q='+encodeURIComponent(q),{headers:{'Accept-Language':'fr'}});const js=await res.json();
