@@ -296,7 +296,7 @@ input,select,textarea{font-size:16px!important}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script>
 "use strict";
-const APP_VERSION='2026-10-13';
+const APP_VERSION='2026-10-13b';
 /* ---------- utilitaires ---------- */
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -416,6 +416,7 @@ function startPlacing(p,text){placing=p;$('#placeText').textContent=text;$('#pla
   const c=p.draft&&hasPos(p.draft)?[p.draft.lat,p.draft.lng]:myPos?[myPos.lat,myPos.lng]:null;if(c)map.setView(c,16)}
 map.on('click',e=>{if(!placing)return;const {lat,lng}=e.latlng,p=placing;placing=null;$('#placeBanner').hidden=true;
   if(p.type==='me'){setMe(lat,lng,null,true);toast('Position définie manuellement')}
+  else if(p.type==='night'){setNight(p.di,{lat:+lat.toFixed(5),lng:+lng.toFixed(5),label:'Point choisi sur la carte'})}
   else if(p.type==='tripDepart'){setTripDepart(lat,lng,'Point placé sur la carte');show('trip')}
   else if(p.type==='depart'){S.settings.depart={lat,lng};save();toast('Point de départ enregistré');show('plus')}
   else if(p.type==='client'){p.draft.lat=+lat.toFixed(6);p.draft.lng=+lng.toFixed(6);p.draft._src='Placé sur la carte';openClientForm(p.draft,p.back)}});
@@ -809,23 +810,37 @@ async function computeTrip(){const t=tripInit();
   toast(`Itinéraire calculé : ${t.plan.days.length} jour(s), ${cl.length} visite(s)`+(M.est?' (temps estimés, serveur de routage indisponible)':''),4500)}
 
 /* recalcule heures, km et nuits quand tu déplaces des clients à la main (ordre conservé) */
+const estLeg=(a,b)=>{const d=hav(a,b)*1.3;return{km:d,min:d/(d<15?28:70)*60}};
 function recalcPlan(){const t=S.trip,p=t.plan,mx=p.mx;if(!mx)return false;const ix=id=>mx.ids.indexOf(id);
   const S0=toMin(t.hStart),E0=toMin(t.hEnd),V=+t.visitMin||30;
   p.days=p.days.filter(d=>d.stops.length);let date=firstDay(t.date,t.noSunday),pos=0;
+  const cpt=k=>{const c=byId(mx.ids[k]);return c?{lat:+c.lat,lng:+c.lng}:null};
   p.days.forEach((d,n)=>{if(n>0)date=nextWorkDay(date,t.noSunday);d.date=date;d.from=pos===0?null:mx.ids[pos];let clock=S0;d.km=0;d.drive=0;d.over=false;
-    for(const s of d.stops){const k=ix(s.id);if(k<0)continue;const dr=mx.dur[pos][k];s.arr=Math.round(clock+dr);s.drive=Math.round(dr);s.km=+mx.dist[pos][k].toFixed(1);d.km+=mx.dist[pos][k];d.drive+=dr;clock=s.arr+V;pos=k;if(clock>E0)d.over=true}
-    if(n===p.days.length-1){const dr=mx.dur[pos][0];d.ret={drive:Math.round(dr),km:+mx.dist[pos][0].toFixed(1),arr:Math.round(clock+dr),late:clock+dr>E0};d.km+=mx.dist[pos][0];d.drive+=dr;d.night=null}
-    else{d.ret=null;d.night=mx.ids[pos]}
+    const prev=n>0?p.days[n-1]:null,startAt=prev&&prev.nightAt?prev.nightAt:null;let first=true;
+    for(const s of d.stops){const k=ix(s.id);if(k<0)continue;let dr,km;
+      if(first&&startAt&&cpt(k)){const e=estLeg(startAt,cpt(k));dr=e.min;km=e.km}else{dr=mx.dur[pos][k];km=mx.dist[pos][k]}first=false;
+      s.arr=Math.round(clock+dr);s.drive=Math.round(dr);s.km=+km.toFixed(1);d.km+=km;d.drive+=dr;clock=s.arr+V;pos=k;if(clock>E0)d.over=true}
+    if(n===p.days.length-1){delete d.nightAt;d.nightLeg=null;const dr=mx.dur[pos][0];d.ret={drive:Math.round(dr),km:+mx.dist[pos][0].toFixed(1),arr:Math.round(clock+dr),late:clock+dr>E0};d.km+=mx.dist[pos][0];d.drive+=dr;d.night=null}
+    else{d.ret=null;d.night=mx.ids[pos];d.nightLeg=null;
+      if(d.nightAt&&cpt(pos)){const e=estLeg(cpt(pos),d.nightAt);d.nightLeg={drive:Math.round(e.min),km:+e.km.toFixed(1),arr:Math.round(clock+e.min)};d.km+=e.km;d.drive+=e.min}}
     d.km=+d.km.toFixed(1);d.drive=Math.round(d.drive)});
   p.manual=true;return true}
+function openNightPicker(di){const p=S.trip.plan;if(!p||!p.mx){toast('Recalcule d’abord l’itinéraire.',4000);return}const d=p.days[di];const cities=cityList();
+  openSheet(`<h2>Nuit du jour ${di+1}</h2><p class="small muted">${esc(fmtDL(d.date))}. Le trajet du soir et celui du lendemain matin sont recalculés (estimation).</p>
+  <div class="form"><button class="btn ${d.nightAt?'':'pri'}" data-act="tNightSet" data-d="${di}" data-k="">Près du dernier client (automatique)</button>
+  <div class="field"><span>Villes de tes clients</span><div class="chipwrap">${cities.map(c=>`<button class="chip" data-act="tNightSet" data-d="${di}" data-k="${esc(c.k)}" aria-pressed="${!!(d.nightAt&&d.nightAt.label===c.name)}">${esc(c.name)}</button>`).join('')}</div></div>
+  <div class="field"><span>Autre ville</span><div class="btns" style="flex-wrap:nowrap"><input id="nightQ" placeholder="Ex. Chefchaouen" style="flex:1;min-width:0"><button class="btn" data-act="tNightFind" data-d="${di}" style="flex:none">Chercher</button></div><div class="small muted" id="nightRes"></div></div>
+  <button class="btn ghost" data-act="tNightMap" data-d="${di}">Placer sur la carte</button></div>`)}
+function setNight(di,v){const p=S.trip.plan;if(v)p.days[di].nightAt=v;else delete p.days[di].nightAt;recalcPlan();save();tripGeom={};closeSheet();if(cur!=='trip')show('trip');else renderTrip();fetchTripGeom();toast(v?'Nuit à '+v.label:'Nuit près du dernier client')}
 function moveTripStop(di,si,dir){const p=S.trip.plan;if(!p||!p.mx){toast('Recalcule d’abord l’itinéraire pour pouvoir déplacer les clients.',4500);return}
   const day=p.days[di],st=day.stops;const j=si+dir;
   if(j>=0&&j<st.length){[st[si],st[j]]=[st[j],st[si]]}
   else if(dir<0){if(di===0)return;p.days[di-1].stops.push(st.splice(si,1)[0])}
   else{const s=st.splice(si,1)[0];if(di===p.days.length-1)p.days.push({stops:[s]});else p.days[di+1].stops.unshift(s)}
   recalcPlan();save();tripGeom={};renderTrip();fetchTripGeom()}
-function dayPoints(d){const t=S.trip,dep={lat:t.depart.lat,lng:t.depart.lng};const st=d.from?byId(d.from):null;
-  const pts=[st&&hasPos(st)?{lat:+st.lat,lng:+st.lng}:dep,...d.stops.map(s=>byId(s.id)).filter(hasPos).map(c=>({lat:+c.lat,lng:+c.lng}))];if(d.ret)pts.push(dep);return pts}
+function prevNight(d){const p=S.trip.plan,i=p.days.indexOf(d);const pr=i>0?p.days[i-1]:null;return pr&&pr.nightAt?pr.nightAt:null}
+function dayPoints(d){const t=S.trip,dep={lat:t.depart.lat,lng:t.depart.lng};const st=d.from?byId(d.from):null,pn=prevNight(d);
+  const pts=[pn?{lat:pn.lat,lng:pn.lng}:st&&hasPos(st)?{lat:+st.lat,lng:+st.lng}:dep,...d.stops.map(s=>byId(s.id)).filter(hasPos).map(c=>({lat:+c.lat,lng:+c.lng}))];if(d.ret)pts.push(dep);if(d.nightAt)pts.push({lat:d.nightAt.lat,lng:d.nightAt.lng});return pts}
 async function fetchTripGeom(){const p=S.trip&&S.trip.plan;if(!p)return;
   await Promise.all(p.days.map(async(d,i)=>{try{const pts=dayPoints(d);if(pts.length<2)return;const js=await osrm('route',pts.map(q=>q.lng.toFixed(6)+','+q.lat.toFixed(6)).join(';'),'overview=simplified&geometries=geojson');if(js.code==='Ok')tripGeom[i]=js.routes[0].geometry.coordinates.map(c=>[c[1],c[0]])}catch(e){}}));drawTrip()}
 let tripShown=false;
@@ -838,9 +853,9 @@ function drawTrip(){tripLayer.clearLayers();$('#tripHide').hidden=!tripShown;con
   return all}
 
 /* liens Google Maps : sur téléphone, 3 étapes intermédiaires maximum par lien -> parties de 4 arrêts */
-function dayLinks(d){const t=S.trip,dep=t.depart;const st=d.from?byId(d.from):null;
-  const origin=st&&hasPos(st)?{lat:+st.lat,lng:+st.lng}:{lat:dep.lat,lng:dep.lng};
-  const seq=d.stops.map(s=>byId(s.id)).filter(hasPos).map(c=>({lat:+c.lat,lng:+c.lng}));if(d.ret)seq.push({lat:dep.lat,lng:dep.lng});
+function dayLinks(d){const t=S.trip,dep=t.depart;const st=d.from?byId(d.from):null,pn=prevNight(d);
+  const origin=pn?{lat:pn.lat,lng:pn.lng}:st&&hasPos(st)?{lat:+st.lat,lng:+st.lng}:{lat:dep.lat,lng:dep.lng};
+  const seq=d.stops.map(s=>byId(s.id)).filter(hasPos).map(c=>({lat:+c.lat,lng:+c.lng}));if(d.ret)seq.push({lat:dep.lat,lng:dep.lng});if(d.nightAt)seq.push({lat:d.nightAt.lat,lng:d.nightAt.lng});
   if(navApp()!=='google'){const c=d.stops.map(s=>byId(s.id)).find(hasPos);return c?[{u:navTo(c.lat,c.lng),l:'1er client · '+NAV[navApp()]}]:[]}
   const links=[];let o=origin,i=0;while(i<seq.length){const part=seq.slice(i,i+4);const dest=part[part.length-1],wp=part.slice(0,-1);
     links.push(`https://www.google.com/maps/dir/?api=1&origin=${o.lat},${o.lng}&destination=${dest.lat},${dest.lng}&travelmode=driving`+(wp.length?'&waypoints='+wp.map(q=>q.lat+','+q.lng).join('%7C'):''));o=dest;i+=4}
@@ -875,10 +890,10 @@ function renderTrip(){const t=tripInit();const cities=cityList();
     <div class="btns"><button class="btn" data-act="tMap">Voir sur la carte</button><button class="btn pri" data-act="tSend">Envoyer dans Journée</button></div>`;
     p.days.forEach((d,i)=>{const col=DAYCOL[i%DAYCOL.length],from=d.from?byId(d.from):null,links=dayLinks(d),night=d.night?byId(d.night):null;
       h+=`<div class="day" style="--dc:${col}"><div class="day-h"><b>Jour ${i+1}</b><span>${esc(fmtDL(d.date))}</span><span class="meta num">${d.km} km · ${fmtDur(d.drive)} de route</span>${d.over?'<span class="small warn" style="flex-basis:100%">Fin de journée dépassée pour terminer la ville</span>':''}</div>
-      <div class="leg start"><span class="h">${t.hStart}</span><span>Départ ${from?'de '+esc(from.ville||from.nom)+' (nuit précédente)':'de '+esc(dep.label||'ton point de départ')}</span><span></span></div>
+      <div class="leg start"><span class="h">${t.hStart}</span><span>Départ ${prevNight(d)?'de '+esc(prevNight(d).label)+' (nuit)':from?'de '+esc(from.ville||from.nom)+' (nuit précédente)':'de '+esc(dep.label||'ton point de départ')}</span><span></span></div>
       ${d.stops.map((s,k)=>{const c=byId(s.id)||{nom:'(client supprimé)'};return`<div class="leg"><span class="h">${fmtH(s.arr)}</span><div style="min-width:0"><div class="nm">${k+1}. ${esc(c.nom)}</div><div class="small muted">${esc([c.activite,c.ville].filter(Boolean).join(' · '))}${c.id?` · <a href="${gmDir(c)}" target="_blank" rel="noopener" style="color:var(--accent);font-weight:600">Y aller</a>`:''}</div><div class="btns" style="gap:4px;margin-top:5px;flex-wrap:nowrap"><button class="btn sm" style="min-height:30px" data-act="tMv" data-d="${i}" data-s="${k}" data-dir="-1" ${i===0&&k===0?'disabled':''}>${k===0?'↑ Jour précédent':'↑ Avancer'}</button><button class="btn sm" style="min-height:30px" data-act="tMv" data-d="${i}" data-s="${k}" data-dir="1" ${i===p.days.length-1&&d.stops.length===1?'disabled':''}>${k===d.stops.length-1?'↓ Jour suivant':'↓ Reculer'}</button></div></div><span class="d">${fmtDur(s.drive)}<br>${s.km} km</span></div>`}).join('')}
-      ${d.ret?`<div class="leg end"><span class="h">${fmtH(d.ret.arr)}</span><span>Retour ${esc(dep.label||'au point de départ')}${d.ret.late?' <span class="warn">· après ta fin de journée</span>':''}</span><span class="d">${fmtDur(d.ret.drive)}<br>${d.ret.km} km</span></div>`:night?`<div class="leg end"><span class="h">Nuit</span><span>Près de ${esc(night.nom)}${night.ville?', '+esc(night.ville):''}</span><span></span></div>`:''}
-      <div class="day-f">${links.map(x=>`<a class="btn sm pri" href="${x.u}" target="_blank" rel="noopener">${x.l}</a>`).join('')}${(()=>{const last=night||byId((d.stops[d.stops.length-1]||{}).id);if(!hasPos(last))return'';return(night?`<button class="btn sm" data-act="aroundAt" data-type="hotel" data-lat="${last.lat}" data-lng="${last.lng}">Hôtels autour</button>`:'')+`<button class="btn sm" data-act="aroundAt" data-type="restaurant" data-lat="${last.lat}" data-lng="${last.lng}">Restaurants autour</button>`})()}</div></div>`})}
+      ${d.ret?`<div class="leg end"><span class="h">${fmtH(d.ret.arr)}</span><span>Retour ${esc(dep.label||'au point de départ')}${d.ret.late?' <span class="warn">· après ta fin de journée</span>':''}</span><span class="d">${fmtDur(d.ret.drive)}<br>${d.ret.km} km</span></div>`:night?`<div class="leg end"><span class="h">${d.nightLeg?fmtH(d.nightLeg.arr):'Nuit'}</span><div style="min-width:0"><div>${d.nightAt?'Nuit à <b>'+esc(d.nightAt.label)+'</b>':'Nuit près de '+esc(night.nom)+(night.ville?', '+esc(night.ville):'')}</div><button class="btn sm" style="min-height:30px;margin-top:5px" data-act="tNight" data-d="${i}">Choisir la ville de la nuit</button></div><span class="d">${d.nightLeg?fmtDur(d.nightLeg.drive)+'<br>'+d.nightLeg.km+' km':''}</span></div>`:''}
+      <div class="day-f">${links.map(x=>`<a class="btn sm pri" href="${x.u}" target="_blank" rel="noopener">${x.l}</a>`).join('')}${(()=>{const last=d.nightAt||night||byId((d.stops[d.stops.length-1]||{}).id);if(!last||!hasPos(last))return'';return(night?`<button class="btn sm" data-act="aroundAt" data-type="hotel" data-lat="${last.lat}" data-lng="${last.lng}">Hôtels autour</button>`:'')+`<button class="btn sm" data-act="aroundAt" data-type="restaurant" data-lat="${last.lat}" data-lng="${last.lng}">Restaurants autour</button>`})()}</div></div>`})}
   $('#tripBody').innerHTML=h;
   const upd=(k,v)=>{t[k]=v;staleTrip();save()};
   $('#tDate').onchange=e=>{if(e.target.value){upd('date',e.target.value);renderTrip()}};
@@ -914,6 +929,14 @@ const TA={
   tpAdd:()=>{const t=tripInit();const ids=$$('#tpList input:checked').map(i=>i.value);if(!ids.length){toast('Sélectionne au moins un client.');return}for(const id of ids){t.excluded=t.excluded.filter(x=>x!==id);if(!t.added.includes(id))t.added.push(id)}staleTrip();save();closeSheet();renderTrip()},
   tCompute:computeTrip,
   tMv:d=>moveTripStop(+d.d,+d.s,+d.dir),
+  tNight:d=>openNightPicker(+d.d),
+  tNightSet:d=>{if(!d.k){setNight(+d.d,null);return}const c=cityList().find(x=>x.k===d.k);if(c)setNight(+d.d,{lat:c.lat,lng:c.lng,label:c.name})},
+  tNightFind:async d=>{const q=$('#nightQ').value.trim();if(!q)return;const r=$('#nightRes');r.textContent='Recherche…';
+    try{const res=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=ma&q='+encodeURIComponent(q),{headers:{'Accept-Language':'fr'}});const js=await res.json();
+      if(!js.length){r.textContent='Ville introuvable. Vérifie l’orthographe ou place-la sur la carte.';return}
+      r.innerHTML=js.map((x,j)=>`<button class="btn sm" style="margin:4px 4px 0 0" data-act="tNightPick" data-d="${d.d}" data-lat="${x.lat}" data-lng="${x.lon}" data-l="${esc(x.display_name.split(',')[0])}">${esc(x.display_name.split(',').slice(0,2).join(','))}</button>`).join('')}catch(e){r.textContent='Recherche indisponible. Place la ville sur la carte.'}},
+  tNightPick:d=>setNight(+d.d,{lat:+d.lat,lng:+d.lng,label:d.l}),
+  tNightMap:d=>startPlacing({type:'night',di:+d.d},'Touche l’endroit où tu passes la nuit'),
   tMap:()=>{tripShown=true;show('carte');const pts=drawTrip();if(pts&&pts.length)map.fitBounds(pts,{padding:[40,40]});toast('Parcours affiché. Les numéros indiquent jour.ordre.',3500)},
   tSend:sendTrip,
   tHide:()=>{tripShown=false;drawTrip()}
@@ -923,7 +946,7 @@ const TA={
 const A={
   closeSheet:closeSheet,confirmOk:()=>{const f=confirmFn;confirmFn=null;closeSheet();f&&f()},
   locate:()=>locate(p=>{if(p){map.setView([p.lat,p.lng],15);if(cur!=='carte')toast('Position mise à jour')}else startPlacing({type:'me'},'Touche la carte pour placer ta position')}),
-  cancelPlace:()=>{const p=placing;placing=null;$('#placeBanner').hidden=true;if(p&&p.type==='client')openClientForm(p.draft,p.back);if(p&&p.type==='tripDepart')show('trip')},
+  cancelPlace:()=>{const p=placing;placing=null;$('#placeBanner').hidden=true;if(p&&p.type==='client')openClientForm(p.draft,p.back);if(p&&(p.type==='tripDepart'||p.type==='night'))show('trip')},
   toggleLegend:()=>{$('#legend').hidden=!$('#legend').hidden},
   chrSearch:chrSearch,
   aroundAt:d=>chrSearchAt(d.lat,d.lng,d.type,'auto'),chrClear:()=>{chrLayer.clearLayers();$('#chrClear').hidden=true;$('#chrListBtn').hidden=true},
